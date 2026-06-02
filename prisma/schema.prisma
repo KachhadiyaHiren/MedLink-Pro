@@ -1,0 +1,175 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id // e.g. DOC-00001, PAT-00001, LAB-00001, ADM-001
+  phone        String   @unique
+  email        String?
+  fullName     String
+  role         String   // doctor, patient, lab, admin
+  profilePhoto String?
+  isVerified   Boolean  @default(true)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model Doctor {
+  id              String   @id // e.g. DOC-00001
+  name            String
+  speciality      String
+  qualifications  String
+  registrationNo  String
+  clinicName      String
+  clinicAddress   String
+  consultationFee Float
+  bio             String
+  languages       String   // comma-separated: "English, Hindi"
+  availableDays   String   // comma-separated: "Monday, Wednesday"
+  profilePhoto    String?
+  rating          Float    @default(5.0)
+  reviewsCount    Int      @default(0)
+  isApproved      Boolean  @default(true)
+}
+
+model Patient {
+  id                String         @id // e.g. PAT-00001
+  name              String
+  primaryPhone      String
+  email             String?
+  dateOfBirth       String         // YYYY-MM-DD
+  gender            String
+  bloodGroup        String
+  address           String?
+  emergencyContact  String?
+  allergies         String?
+  chronicConditions String?
+  createdAt         DateTime       @default(now())
+  familyMembers     FamilyMember[]
+}
+
+model FamilyMember {
+  id                String  @id // e.g. FM-00001
+  name              String
+  relation          String  // Son, Spouse, etc.
+  dateOfBirth       String  // YYYY-MM-DD
+  gender            String
+  bloodGroup        String?
+  allergies         String?
+  chronicConditions String?
+  patientId         String
+  patient           Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
+
+model Appointment {
+  id              String   @id // e.g. APT-20260601-001
+  doctorId        String
+  patientId       String
+  familyMemberId  String?  // null if patient themselves
+  appointmentDate String   // YYYY-MM-DD
+  appointmentTime String   // HH:MM AM/PM
+  status          String   // scheduled, completed, cancelled
+  visitType       String   // first-visit, follow-up, emergency
+  chiefComplaint  String
+  notes           String?
+  createdAt       DateTime @default(now())
+}
+
+model Consultation {
+  id             String   @id // e.g. CNS-20260601-001
+  appointmentId  String   @unique
+  subjective     String
+  objective      String
+  assessment     String
+  plan           String
+  diagnosisCodes String?  // comma-separated
+  bp             String?
+  pulse          String?
+  temp           String?
+  spo2           String?
+  weight         String?
+  height         String?
+  followUpDate   String?
+  createdAt      DateTime @default(now())
+}
+
+model Prescription {
+  id             String   @id // e.g. RX-20260601-001
+  consultationId String
+  appointmentId  String
+  doctorId       String
+  patientId      String
+  familyMemberId String?
+  issuedAt       DateTime @default(now())
+  validUntil     String
+  notes          String?
+  medicinesJson  String   // JSON string of medicines array
+}
+
+model LabOrder {
+  id             String   @id // e.g. LO-20260601-001
+  appointmentId  String
+  doctorId       String
+  patientId      String
+  labId          String?  // assigned laboratory center user ID
+  testsJson      String   // JSON string of tests array
+  status         String   // ordered, lab-assigned, completed
+  notes          String?
+  createdAt      DateTime @default(now())
+}
+
+model LabReport {
+  id               String   @id // e.g. RPT-20260601-001
+  labOrderId       String   @unique
+  appointmentId    String
+  patientId        String
+  uploadedBy       String   // lab center ID
+  reportTitle      String
+  reportType       String
+  findings         String
+  notes            String?
+  fileUrl          String?
+  fileName         String?
+  uploadedAt       DateTime @default(now())
+  isVisiblePatient Boolean  @default(true)
+}
+
+model MedicineOrder {
+  id              String   @id // e.g. MO-20260601-001
+  patientId       String
+  prescriptionId  String?
+  itemsJson       String   // JSON string of items array
+  totalAmount     Float
+  status          String   // placed, delivered, cancelled
+  deliveryAddress String
+  createdAt       DateTime @default(now())
+}
+
+model MedicinesCatalog {
+  id                  String  @id // e.g. MED-001
+  name                String
+  genericName         String
+  category            String
+  price               Float
+  unit                String
+  requiresPrescription Boolean
+}
+
+model Referral {
+  id                 String   @id // e.g. REF-20260601-001
+  appointmentId      String
+  referringDoctorId  String
+  referredToDoctorId String
+  patientId          String
+  reason             String
+  urgency            String   // routine, urgent, emergency
+  notes              String?
+  status             String   // sent, accepted, rejected, completed
+  createdAt          DateTime @default(now())
+}
+

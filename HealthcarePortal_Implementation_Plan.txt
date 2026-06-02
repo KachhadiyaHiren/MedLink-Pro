@@ -1,0 +1,1234 @@
+================================================================================
+        MEDLINK PRO — COMPLETE HEALTHCARE PORTAL IMPLEMENTATION PLAN
+        Full Web & Mobile Application Blueprint (Doctor · Patient · Lab)
+================================================================================
+
+PROJECT NAME     : MedLink Pro
+VERSION          : 1.0
+DOCUMENT TYPE    : Full Implementation Blueprint for AI-Assisted Development
+TARGET PLATFORMS : Web (React/Next.js) + Mobile (React Native / Flutter)
+PREPARED FOR     : Development Team / AI Code Generation
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — EXECUTIVE SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MedLink Pro is a multi-portal healthcare management system connecting Doctors,
+Patients, and Diagnostic Labs/Pharmacies in one unified platform. The system
+eliminates paper records, streamlines appointment booking, enables digital
+prescriptions and PDF generation, facilitates lab report uploads, and provides
+analytics dashboards for practitioners.
+
+Core Portals:
+  1. Doctor Portal         — Practice management, scheduling, prescriptions
+  2. Patient Portal        — Appointments, records, lab booking, medicines
+  3. Lab / Diagnostics     — Report upload, appointment tracking
+  4. Admin Panel           — Platform management, analytics, billing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — USER ROLES & PERMISSIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ROLE 1 — DOCTOR
+  - Register/enroll with profile, speciality, qualifications, clinic info
+  - Manage own patients (add, update, view history)
+  - Manage appointments (create, modify, cancel)
+  - Write prescriptions (medicines, dosage, instructions)
+  - Order lab tests, view lab reports
+  - Refer patients to other enrolled doctors
+  - Generate and print PDFs (prescription slip, reports summary)
+  - Calendar management (availability, blocked slots)
+  - View analytics dashboard (monthly reports, referral stats, revenue)
+  - Search patients by ID, name, phone, appointment ID
+
+ROLE 2 — DOCTOR'S ASSISTANT
+  - Sub-role under a Doctor account
+  - Block/manage doctor's calendar
+  - Add/edit appointment slots
+  - View (not modify) patient records
+  - Cannot write prescriptions
+
+ROLE 3 — PATIENT
+  - Login via phone number (OTP-based)
+  - Multiple family members per phone number (profile switcher)
+  - View appointment history
+  - Book appointments (search by doctor, illness, speciality, location)
+  - Book lab tests for a specific appointment
+  - Order medicines online
+  - Upload personal reports (PDF, images, X-rays)
+  - View reports uploaded by labs and doctors
+  - Receive digital prescription PDF
+
+ROLE 4 — LAB / DIAGNOSTIC CENTER
+  - Register as a lab partner
+  - View appointments assigned for lab tests
+  - Upload reports directly against Appointment ID
+  - Manage test catalog and pricing
+  - Notify doctor and patient on report upload
+
+ROLE 5 — PLATFORM ADMIN
+  - Approve/reject doctor and lab registrations
+  - Manage all users
+  - View platform-wide analytics
+  - Manage subscription/billing plans
+  - Content management (diseases list, medicine catalog)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — DATA MODELS (Database Schema)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TABLE: users
+  - user_id           (UUID, PK)
+  - phone             (VARCHAR, unique)
+  - email             (VARCHAR, nullable)
+  - full_name         (VARCHAR)
+  - role              (ENUM: doctor, patient, lab, assistant, admin)
+  - profile_photo     (URL)
+  - created_at        (TIMESTAMP)
+  - is_verified       (BOOLEAN)
+  - is_active         (BOOLEAN)
+
+TABLE: doctors
+  - doctor_id         (UUID, PK, FK → users.user_id)
+  - doctor_code       (VARCHAR, unique, auto-generated e.g. DOC-00123)
+  - registration_no   (VARCHAR)           — Medical council number
+  - speciality        (VARCHAR)           — Cardiologist, Neurologist, etc.
+  - sub_speciality    (VARCHAR)
+  - qualifications    (TEXT)              — MBBS, MD, etc.
+  - clinic_name       (VARCHAR)
+  - clinic_address    (TEXT)
+  - consultation_fee  (DECIMAL)
+  - bio               (TEXT)
+  - languages         (ARRAY VARCHAR)
+  - available_days    (ARRAY VARCHAR)
+  - slot_duration_min (INT, default 15)
+  - is_approved       (BOOLEAN)
+
+TABLE: doctor_assistants
+  - assistant_id      (UUID, PK)
+  - doctor_id         (FK → doctors.doctor_id)
+  - user_id           (FK → users.user_id)
+  - permissions       (JSON)              — e.g. {calendar:true, records:false}
+
+TABLE: patients
+  - patient_id        (UUID, PK)
+  - patient_code      (VARCHAR, unique, auto-generated e.g. PAT-00456)
+  - primary_phone     (VARCHAR)
+  - full_name         (VARCHAR)
+  - date_of_birth     (DATE)
+  - gender            (ENUM: male, female, other)
+  - blood_group       (VARCHAR)
+  - address           (TEXT)
+  - emergency_contact (VARCHAR)
+  - allergies         (TEXT)
+  - chronic_conditions(TEXT)
+  - added_by_doctor   (FK → doctors.doctor_id, nullable)
+  - created_at        (TIMESTAMP)
+
+TABLE: patient_family_members
+  - member_id         (UUID, PK)
+  - primary_phone     (VARCHAR)           — shared with head of family
+  - full_name         (VARCHAR)
+  - relation          (VARCHAR)
+  - date_of_birth     (DATE)
+  - gender            (ENUM)
+  - patient_id        (FK → patients.patient_id)
+
+TABLE: appointments
+  - appointment_id    (UUID, PK)
+  - appointment_code  (VARCHAR, unique, auto-generated e.g. APT-20240601-001)
+  - doctor_id         (FK → doctors.doctor_id)
+  - patient_id        (FK → patients.patient_id)
+  - appointment_date  (DATE)
+  - appointment_time  (TIME)
+  - status            (ENUM: scheduled, in-progress, completed, cancelled, no-show)
+  - visit_type        (ENUM: first-visit, follow-up, emergency)
+  - chief_complaint   (TEXT)
+  - notes             (TEXT)
+  - is_telemedicine   (BOOLEAN)
+  - created_at        (TIMESTAMP)
+  - created_by        (FK → users.user_id)
+
+TABLE: consultations
+  - consultation_id   (UUID, PK)
+  - appointment_id    (FK → appointments.appointment_id)
+  - subjective        (TEXT)             — Patient's reported symptoms
+  - objective         (TEXT)             — Doctor's observations
+  - assessment        (TEXT)             — Diagnosis
+  - plan              (TEXT)             — Treatment plan
+  - diagnosis_codes   (ARRAY VARCHAR)    — ICD-10 codes
+  - vital_signs       (JSON)             — {bp, pulse, temp, weight, height, spo2}
+  - follow_up_date    (DATE)
+  - created_at        (TIMESTAMP)
+
+TABLE: prescriptions
+  - prescription_id   (UUID, PK)
+  - consultation_id   (FK → consultations.consultation_id)
+  - appointment_id    (FK → appointments.appointment_id)
+  - doctor_id         (FK → doctors.doctor_id)
+  - patient_id        (FK → patients.patient_id)
+  - issued_at         (TIMESTAMP)
+  - valid_until       (DATE)
+  - notes             (TEXT)
+  - pdf_url           (URL)
+
+TABLE: prescription_medicines
+  - item_id           (UUID, PK)
+  - prescription_id   (FK → prescriptions.prescription_id)
+  - medicine_name     (VARCHAR)
+  - dosage            (VARCHAR)          — e.g. 500mg
+  - frequency         (VARCHAR)          — e.g. twice daily
+  - duration          (VARCHAR)          — e.g. 7 days
+  - instructions      (TEXT)             — after meal, with water
+  - quantity          (INT)
+
+TABLE: lab_orders
+  - lab_order_id      (UUID, PK)
+  - appointment_id    (FK → appointments.appointment_id)
+  - doctor_id         (FK → doctors.doctor_id)
+  - patient_id        (FK → patients.patient_id)
+  - lab_id            (FK → labs.lab_id, nullable)
+  - tests_ordered     (JSON ARRAY)       — [{test_name, test_code, urgency}]
+  - status            (ENUM: ordered, lab-assigned, sample-collected, processing, completed)
+  - notes             (TEXT)
+  - created_at        (TIMESTAMP)
+
+TABLE: lab_reports
+  - report_id         (UUID, PK)
+  - lab_order_id      (FK → lab_orders.lab_order_id)
+  - appointment_id    (FK → appointments.appointment_id)
+  - patient_id        (FK → patients.patient_id)
+  - uploaded_by       (FK → users.user_id)
+  - report_title      (VARCHAR)
+  - report_type       (ENUM: blood-test, urine-test, x-ray, mri, ct-scan, ecg, other)
+  - file_url          (URL)
+  - file_type         (VARCHAR)          — pdf, jpg, png, dicom
+  - notes             (TEXT)
+  - uploaded_at       (TIMESTAMP)
+  - is_visible_patient(BOOLEAN, default true)
+
+TABLE: referrals
+  - referral_id       (UUID, PK)
+  - appointment_id    (FK → appointments.appointment_id)
+  - referring_doctor  (FK → doctors.doctor_id)
+  - referred_to_doctor(FK → doctors.doctor_id)
+  - patient_id        (FK → patients.patient_id)
+  - reason            (TEXT)
+  - urgency           (ENUM: routine, urgent, emergency)
+  - notes             (TEXT)
+  - status            (ENUM: sent, accepted, rejected, completed)
+  - created_at        (TIMESTAMP)
+
+TABLE: labs
+  - lab_id            (UUID, PK)
+  - lab_code          (VARCHAR, unique)
+  - name              (VARCHAR)
+  - address           (TEXT)
+  - phone             (VARCHAR)
+  - email             (VARCHAR)
+  - accreditation     (VARCHAR)
+  - tests_catalog     (JSON)
+  - operating_hours   (JSON)
+  - is_approved       (BOOLEAN)
+  - user_id           (FK → users.user_id)
+
+TABLE: doctor_calendar
+  - slot_id           (UUID, PK)
+  - doctor_id         (FK → doctors.doctor_id)
+  - slot_date         (DATE)
+  - slot_time         (TIME)
+  - slot_duration_min (INT)
+  - status            (ENUM: available, booked, blocked, break)
+  - blocked_by        (FK → users.user_id, nullable)
+  - block_reason      (VARCHAR)
+  - appointment_id    (FK → appointments.appointment_id, nullable)
+
+TABLE: medicines_catalog
+  - medicine_id       (UUID, PK)
+  - name              (VARCHAR)
+  - generic_name      (VARCHAR)
+  - category          (VARCHAR)
+  - manufacturer      (VARCHAR)
+  - price             (DECIMAL)
+  - unit              (VARCHAR)           — tablet, syrup, injection
+  - requires_prescription (BOOLEAN)
+  - stock_qty         (INT)
+  - image_url         (URL)
+
+TABLE: medicine_orders
+  - order_id          (UUID, PK)
+  - patient_id        (FK → patients.patient_id)
+  - prescription_id   (FK → prescriptions.prescription_id, nullable)
+  - items             (JSON ARRAY)        — [{medicine_id, qty, price}]
+  - total_amount      (DECIMAL)
+  - status            (ENUM: placed, confirmed, dispatched, delivered, cancelled)
+  - delivery_address  (TEXT)
+  - created_at        (TIMESTAMP)
+
+TABLE: notifications
+  - notification_id   (UUID, PK)
+  - user_id           (FK → users.user_id)
+  - type              (VARCHAR)           — appointment, report, referral, order
+  - title             (VARCHAR)
+  - message           (TEXT)
+  - is_read           (BOOLEAN)
+  - created_at        (TIMESTAMP)
+  - action_url        (VARCHAR)
+
+TABLE: patient_documents
+  - doc_id            (UUID, PK)
+  - patient_id        (FK → patients.patient_id)
+  - title             (VARCHAR)
+  - doc_type          (ENUM: xray, mri, blood-report, prescription, other)
+  - file_url          (URL)
+  - uploaded_by_role  (ENUM: patient, doctor, lab)
+  - appointment_id    (FK → appointments.appointment_id, nullable)
+  - uploaded_at       (TIMESTAMP)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — API ENDPOINTS (REST)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BASE URL: https://api.medlinkpro.com/v1
+
+AUTH
+  POST   /auth/otp/request             — Request OTP (phone)
+  POST   /auth/otp/verify              — Verify OTP → JWT token
+  POST   /auth/register/doctor         — Doctor self-registration
+  POST   /auth/register/lab            — Lab self-registration
+  POST   /auth/logout                  — Invalidate token
+  GET    /auth/me                      — Current user info
+
+DOCTORS
+  GET    /doctors                      — List all approved doctors (public, paginated)
+  GET    /doctors/search               — Search by name, speciality, location, illness
+  GET    /doctors/:doctor_id           — Doctor profile (public)
+  PUT    /doctors/:doctor_id           — Update own profile
+  GET    /doctors/:doctor_id/stats     — Dashboard stats
+  GET    /doctors/:doctor_id/calendar  — Get calendar slots
+  POST   /doctors/:doctor_id/calendar/block — Block time slot (assistant or doctor)
+  DELETE /doctors/:doctor_id/calendar/:slot_id — Unblock slot
+
+PATIENTS (Doctor access)
+  POST   /patients                     — Add new patient
+  GET    /patients                     — List doctor's patients (with search)
+  GET    /patients/:patient_id         — Patient full profile
+  PUT    /patients/:patient_id         — Update patient info
+  GET    /patients/:patient_id/history — Full appointment + consultation history
+  GET    /patients/:patient_id/documents — All documents, reports, prescriptions
+  GET    /patients/search              — Search by ID, name, phone, appointment code
+
+APPOINTMENTS
+  POST   /appointments                 — Create appointment
+  GET    /appointments                 — List appointments (with filters)
+  GET    /appointments/:appointment_id — Single appointment detail
+  PUT    /appointments/:appointment_id — Update appointment
+  PATCH  /appointments/:appointment_id/status — Change status
+  DELETE /appointments/:appointment_id — Cancel appointment
+
+CONSULTATIONS
+  POST   /consultations                — Create/save consultation notes
+  GET    /consultations/:consultation_id — View consultation
+  PUT    /consultations/:consultation_id — Update consultation
+
+PRESCRIPTIONS
+  POST   /prescriptions                — Create prescription
+  GET    /prescriptions/:prescription_id — View prescription
+  GET    /prescriptions/:prescription_id/pdf — Download PDF
+  GET    /patients/:patient_id/prescriptions — Patient's prescription history
+
+LAB ORDERS
+  POST   /lab-orders                   — Create lab order (from doctor)
+  GET    /lab-orders/:lab_order_id     — View lab order
+  PATCH  /lab-orders/:lab_order_id/assign — Assign to a lab
+  GET    /appointments/:appointment_id/lab-orders — Orders by appointment
+
+LAB REPORTS
+  POST   /lab-reports                  — Upload report (lab or patient)
+  GET    /lab-reports/:report_id       — View report
+  GET    /patients/:patient_id/reports — All reports for patient
+  GET    /appointments/:appointment_id/reports — Reports by appointment
+
+REFERRALS
+  POST   /referrals                    — Create referral
+  GET    /referrals                    — List referrals (sent/received)
+  PATCH  /referrals/:referral_id/status — Accept/reject referral
+
+LABS
+  GET    /labs                         — List labs (public)
+  GET    /labs/:lab_id                 — Lab profile
+  PUT    /labs/:lab_id                 — Update lab profile
+  GET    /labs/:lab_id/orders          — Lab's assigned orders
+  GET    /labs/:lab_id/reports         — Reports uploaded by lab
+
+MEDICINES
+  GET    /medicines                    — Browse catalog (with search/filter)
+  GET    /medicines/:medicine_id       — Single medicine detail
+  POST   /medicine-orders             — Place order
+  GET    /medicine-orders/:order_id    — Order status
+  GET    /patients/:patient_id/medicine-orders — Patient order history
+
+NOTIFICATIONS
+  GET    /notifications                — Current user's notifications
+  PATCH  /notifications/:id/read       — Mark as read
+  POST   /notifications/push/register  — Register push token
+
+ANALYTICS (Doctor)
+  GET    /analytics/doctor/:doctor_id/summary    — Summary stats
+  GET    /analytics/doctor/:doctor_id/monthly    — Monthly breakdown
+  GET    /analytics/doctor/:doctor_id/referrals  — Referral stats
+  GET    /analytics/doctor/:doctor_id/patients   — Patient demographics
+
+ADMIN
+  GET    /admin/doctors/pending         — Pending doctor approvals
+  PATCH  /admin/doctors/:id/approve     — Approve/reject doctor
+  GET    /admin/labs/pending            — Pending lab approvals
+  GET    /admin/stats                   — Platform-wide stats
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5 — DOCTOR PORTAL: FEATURE DETAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5.1 REGISTRATION & PROFILE
+  - Registration form: name, phone, email, speciality, sub-speciality
+  - Upload: photo, degree certificates, medical council registration
+  - Clinic details: name, address, GPS coordinates, operating hours
+  - Admin reviews and approves profile before going live
+  - Each doctor gets a unique Doctor ID (DOC-XXXXX)
+  - Profile shows: experience, languages spoken, availability, fees
+
+5.2 DASHBOARD (Home)
+  - Today's appointment count
+  - Upcoming appointments list (next 4 hours)
+  - Pending lab reports to review
+  - Pending referrals (incoming)
+  - Recent patient activity
+  - Quick actions: Add Patient, New Appointment, View Calendar
+
+5.3 PATIENT MANAGEMENT
+  - Add patient manually: name, phone, DOB, gender, blood group, address, allergies
+  - Each patient gets unique Patient ID (PAT-XXXXX)
+  - Patient search: by ID, name, phone number, appointment code
+  - Patient timeline view: all appointments, prescriptions, reports in chronological order
+  - Edit patient demographics
+  - Flag patients (VIP, high-risk, chronic)
+  - Patient notes (private doctor notes)
+
+5.4 APPOINTMENT FLOW
+  Step 1: Select patient (search or add new)
+  Step 2: Pick date/time from available calendar
+  Step 3: Set visit type (first visit / follow-up / emergency)
+  Step 4: Add chief complaint
+  Step 5: Save → Appointment ID generated (APT-YYYYMMDD-XXX)
+
+  During consultation:
+  - Record vital signs (BP, pulse, temperature, SpO2, weight, height)
+  - Write SOAP notes (Subjective / Objective / Assessment / Plan)
+  - Add diagnosis (free text or ICD-10 search)
+  - Add medicines (search catalog or free type)
+    - Medicine name, dosage, frequency, duration, instructions
+  - Order lab tests (select from standard test list)
+  - Add follow-up date
+  - Refer to another doctor (select from enrolled doctors by speciality)
+
+5.5 PRESCRIPTION PDF GENERATION
+  Header: Clinic logo, doctor name, qualifications, registration number, clinic address
+  Patient info: Name, Age, Gender, Patient ID, Date
+  Vital signs block
+  Diagnosis section
+  Medicine table: Name | Dosage | Frequency | Duration | Instructions
+  Lab tests ordered
+  Follow-up date
+  Doctor signature block
+  Powered by MedLink Pro footer
+  Options: Preview → Print / Download PDF / Share via WhatsApp
+
+5.6 REPORTS TAB (Doctor)
+  - Lab Reports: all reports for all patients, filterable by date/patient/type
+  - Upload Documents: doctor can upload documents against patient + appointment
+  - Analytics sub-tab:
+    * Appointments per day/week/month (bar chart)
+    * Top diagnoses (pie chart)
+    * New vs returning patients (line chart)
+    * Referrals sent vs received
+    * Revenue / consultation fees collected
+    * Patient demographics (age, gender breakdown)
+  - Monthly summary downloadable as PDF
+
+5.7 REFERRALS
+  - When creating a referral: select speciality → filtered list of enrolled doctors
+  - Add reason, urgency, clinical notes
+  - Referred doctor receives notification
+  - Referring doctor can track referral status
+  - Patient is notified of referral
+
+5.8 CALENDAR
+  - Month / Week / Day view
+  - Color coding: Available (green), Booked (blue), Blocked (red), Break (yellow)
+  - Doctor can set recurring availability (e.g. Mon-Fri 10am-2pm)
+  - Doctor or assistant can block specific time slots with reason
+  - Drag to reschedule appointments (with patient notification)
+  - Telemedicine slots marked separately
+  - Export calendar to Google Calendar / iCal
+
+5.9 SEARCH FUNCTIONALITY (Doctor)
+  Search bar accepts:
+  - Patient name (partial match)
+  - Patient ID (PAT-XXXXX)
+  - Phone number
+  - Appointment ID (APT-YYYYMMDD-XXX)
+  - Diagnosis keyword
+  Results show: patient card with quick-link to profile and latest appointment
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6 — PATIENT PORTAL: FEATURE DETAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+6.1 LOGIN FLOW
+  - Enter phone number → receive OTP via SMS
+  - Enter OTP → logged in
+  - If multiple patients linked to that phone:
+    * Show family member list with photos/names
+    * User selects which patient profile to use
+    * Can switch profiles anytime from top bar
+
+6.2 PATIENT DASHBOARD
+  - Upcoming appointment card (date, time, doctor, clinic)
+  - Pending lab test status
+  - Recent prescriptions (last 3)
+  - Notifications bell
+  - Quick links: Book Appointment, My Reports, Order Medicine
+
+6.3 FIND A DOCTOR & BOOK APPOINTMENT
+  Search by:
+  - Doctor name
+  - Speciality (Cardiologist, Dermatologist, etc.)
+  - Illness / symptoms (mapped to speciality)
+  - Location / area
+  - Language
+  - Availability (today, tomorrow, this week)
+  - Consultation fee range
+
+  Doctor card shows:
+  - Photo, name, speciality, qualifications
+  - Clinic name and address
+  - Average rating and reviews
+  - Next available slot
+  - Consultation fee
+  - "Book Now" button
+
+  Booking flow:
+  Step 1: Select available slot from calendar
+  Step 2: Select patient (self or family member)
+  Step 3: Enter chief complaint / reason for visit
+  Step 4: Confirm and pay (optional, if payment enabled)
+  Step 5: Receive confirmation with Appointment ID via SMS + in-app
+
+6.4 APPOINTMENT HISTORY
+  - List of all past and upcoming appointments
+  - Filter by: date range, doctor, status
+  - Each appointment card:
+    * Date, time, doctor, clinic
+    * Status badge
+    * Tap to expand: diagnosis, medicines, lab orders, follow-up
+  - Download prescription PDF
+  - Book follow-up directly from card
+
+6.5 MY REPORTS & DOCUMENTS
+  - All uploaded reports (from lab, doctor, or self)
+  - Filter by: type (X-ray, blood test, MRI, etc.), date, appointment
+  - Tap to preview (PDF viewer / image viewer)
+  - Upload own document (photo or PDF)
+    * Set type, add date, link to appointment (optional)
+  - Share report with doctor (generates shareable link)
+
+6.6 LAB TEST BOOKING
+  - After doctor orders a lab test, patient sees it in "Pending Tests"
+  - Patient can:
+    * View list of empanelled labs with distance, price, rating
+    * Book home sample collection
+    * Walk-in time slot booking
+  - Lab receives booking notification
+  - Status tracked: Ordered → Sample Collected → Processing → Report Ready
+  - Notification on report upload
+
+6.7 ONLINE MEDICINE ORDERING
+  - Browse medicine catalog (name, image, price, pack size)
+  - Search by name, generic name, category
+  - Prescription medicines: upload prescription or link from app
+  - Add to cart, set quantity
+  - Enter delivery address (saved addresses)
+  - Payment: online / COD
+  - Track order status
+  - Reorder from previous orders
+
+6.8 HEALTH RECORDS WALLET
+  - Chronological timeline of all health events
+  - Can share complete health summary as PDF to new doctor
+  - Allergy list, chronic conditions prominently shown
+  - Vaccination records (self-uploaded)
+  - Insurance card upload
+
+6.9 RATINGS & REVIEWS
+  - After completed appointment, prompt to rate doctor (1-5 stars)
+  - Optional written review
+  - Reviews visible on doctor's public profile
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 7 — LAB / DIAGNOSTIC CENTER PORTAL: FEATURE DETAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+7.1 REGISTRATION
+  - Lab name, address, phone, email
+  - Accreditation details (NABL, ISO, etc.)
+  - Upload: license, accreditation certificates
+  - Test catalog: name, code, price, sample type, turnaround time
+  - Operating hours
+  - Admin approval required
+
+7.2 DASHBOARD
+  - Today's pending sample collections
+  - Reports due (in-progress tests)
+  - Recently uploaded reports
+  - Monthly report volume chart
+
+7.3 ORDER MANAGEMENT
+  - View incoming lab orders (from doctors)
+  - Each order shows: Appointment ID, Patient Name, Tests Required, Doctor Name
+  - Accept / Decline order
+  - Assign technician
+  - Update status: Sample Collected → Processing → Completed
+
+7.4 REPORT UPLOAD
+  - Select order (or search by Appointment ID)
+  - Upload file (PDF, JPG, PNG, DICOM)
+  - Add report title, date, technician name, notes
+  - Submit → Doctor and patient both notified instantly
+  - Report appears in patient's and doctor's portals
+
+7.5 HOME COLLECTION MANAGEMENT
+  - View home collection bookings with address and time slot
+  - Assign phlebotomist
+  - Track collection status via app
+
+7.6 ANALYTICS
+  - Tests completed per day/month
+  - Most ordered tests
+  - Revenue summary
+  - Turnaround time averages
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 8 — ADMIN PANEL: FEATURE DETAIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+8.1 USER MANAGEMENT
+  - View all doctors, patients, labs
+  - Approve / suspend / delete accounts
+  - View user activity logs
+
+8.2 PLATFORM ANALYTICS
+  - Total appointments per day/week/month
+  - Total registered doctors, patients, labs
+  - Top specialities by appointment volume
+  - Geographic heat map of usage
+  - Revenue and transaction summary
+
+8.3 CONTENT MANAGEMENT
+  - Manage disease / illness list (used in patient search)
+  - Manage speciality list
+  - Manage medicine catalog (bulk import via CSV)
+  - Manage notification templates (SMS, push)
+  - Manage static pages (terms, privacy, FAQ)
+
+8.4 SUBSCRIPTION & BILLING
+  - Doctor subscription plans (basic / pro / enterprise)
+  - Payment history per doctor
+  - Generate invoices
+  - Lab partner commission management
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 9 — ADDITIONAL FEATURES (VALUE-ADDS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+9.1 TELEMEDICINE / VIDEO CONSULTATION
+  - Doctor marks slots as "telemedicine available"
+  - Patient books video appointment
+  - In-app video call (WebRTC or Twilio integration)
+  - Post-call: prescription generated as usual
+  - Recording optional (with patient consent)
+
+9.2 WHATSAPP INTEGRATION
+  - Appointment confirmation via WhatsApp
+  - Prescription PDF sent to patient's WhatsApp
+  - Lab report notification with download link
+  - Appointment reminders (24hr and 1hr before)
+  - OTP delivery fallback
+
+9.3 SMART SYMPTOM CHECKER (AI)
+  - Patient enters symptoms (checkbox or free text)
+  - AI suggests likely condition and recommended speciality
+  - Shows top 3 relevant doctors to book
+  - Disclaimer: "Not a medical diagnosis"
+
+9.4 PATIENT HEALTH TRENDS
+  - Doctor can log vitals at every visit
+  - Charts show: BP trend, weight trend, blood sugar trend over time
+  - Alerts if reading is outside normal range
+  - Useful for managing chronic patients (diabetes, hypertension)
+
+9.5 PRESCRIPTION DRUG INTERACTION CHECK
+  - Before saving prescription, check medicine combinations
+  - Warn doctor if known drug interaction detected
+  - Data source: OpenFDA API or local drug interaction database
+
+9.6 APPOINTMENT REMINDERS & FOLLOW-UP AUTOMATION
+  - Automated SMS/push 24 hours before appointment
+  - 1-hour reminder
+  - Post-consultation follow-up reminder on follow-up date
+  - Automated "How was your visit?" rating prompt
+
+9.7 INSURANCE INTEGRATION
+  - Patient can add insurance card details
+  - Doctor marks consultation as insurance-billable
+  - Generate insurance claim document / summary PDF
+
+9.8 MULTI-LANGUAGE SUPPORT
+  - UI available in English, Hindi, Marathi (configurable by region)
+  - Doctor prescriptions can be printed in local language
+
+9.9 OFFLINE MODE (Mobile)
+  - Doctor can add consultation notes offline
+  - Syncs automatically when internet restored
+  - Useful in low-connectivity clinics
+
+9.10 PATIENT QUEUE DISPLAY
+  - TV/screen at clinic shows live token queue
+  - Patients see their token on phone
+  - "Your turn is next" push notification
+
+9.11 SECOND OPINION FEATURE
+  - Patient can request a second opinion on a consultation
+  - Consultation summary + reports shared with second doctor
+  - Second doctor reviews and adds notes
+
+9.12 EMERGENCY CONTACT SHARING
+  - Doctor can flag an appointment as emergency
+  - System notifies emergency contact of patient
+  - Nearest hospital information shown
+
+9.13 DOCUMENT EXPIRY ALERTS
+  - Alert patients when prescriptions are about to expire
+  - Alert doctors when patient's chronic medicine refill is due
+
+9.14 CLINIC MANAGEMENT (Multi-Doctor Clinic)
+  - Clinic admin account
+  - Manage multiple doctors under one clinic
+  - Shared receptionist/assistant access
+  - Unified clinic calendar view
+  - Billing and reports at clinic level
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 10 — TECHNOLOGY STACK RECOMMENDATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FRONTEND — WEB
+  Framework     : Next.js 14+ (React, TypeScript)
+  UI Library    : Tailwind CSS + Shadcn/UI
+  State Mgmt    : Zustand or Redux Toolkit
+  Forms         : React Hook Form + Zod validation
+  Charts        : Recharts or Chart.js
+  PDF Generation: React-PDF / jsPDF (client-side)
+  Calendar      : FullCalendar.js
+  File Upload   : react-dropzone
+  Video Call    : Twilio Video SDK / Daily.co
+
+FRONTEND — MOBILE
+  Framework     : React Native (Expo) OR Flutter
+  Navigation    : React Navigation v6
+  Push Notif.   : Expo Notifications / Firebase Cloud Messaging
+  Storage       : MMKV / AsyncStorage
+  Camera/Files  : Expo Camera, Expo Document Picker
+
+BACKEND
+  Runtime       : Node.js with Express OR NestJS (TypeScript)
+  Authentication: JWT + Refresh tokens, OTP via SMS gateway
+  ORM           : Prisma (PostgreSQL)
+  File Storage  : AWS S3 / Cloudflare R2
+  PDF Engine    : Puppeteer (server-side PDF) OR PDFKit
+  Queue/Jobs    : Bull (Redis) for notifications, PDF generation
+  Search        : PostgreSQL full-text search OR Elasticsearch
+  SMS Gateway   : Twilio / MSG91 / Fast2SMS (India)
+  Push Notif.   : Firebase Cloud Messaging (FCM)
+  Email         : SendGrid / AWS SES
+  Video         : Twilio Programmable Video
+
+DATABASE
+  Primary DB    : PostgreSQL 15+
+  Cache         : Redis (sessions, OTP, calendar slots)
+  Search Index  : Elasticsearch (optional, for large deployments)
+  File Storage  : AWS S3 with pre-signed URLs
+
+INFRASTRUCTURE
+  Hosting       : AWS / DigitalOcean / Vercel (web)
+  CI/CD         : GitHub Actions
+  Monitoring    : Sentry (errors), Datadog (performance)
+  SSL           : Let's Encrypt / CloudFlare
+  CDN           : CloudFront / Cloudflare
+
+SECURITY
+  - HTTPS everywhere
+  - JWT with short expiry + refresh token rotation
+  - OTP rate limiting (max 3 attempts / 10 min)
+  - Role-based access control (RBAC) on every endpoint
+  - File upload: type validation, size limits, virus scan (ClamAV)
+  - HIPAA/data privacy compliant storage (encrypted at rest)
+  - Audit log for all data access and modifications
+  - OWASP top-10 mitigations
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 11 — FOLDER STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+medlinkpro/
+├── apps/
+│   ├── web/                        (Next.js web app)
+│   │   ├── app/
+│   │   │   ├── (auth)/             login, register pages
+│   │   │   ├── doctor/             doctor portal pages
+│   │   │   ├── patient/            patient portal pages
+│   │   │   ├── lab/                lab portal pages
+│   │   │   └── admin/              admin panel pages
+│   │   ├── components/
+│   │   │   ├── ui/                 shadcn base components
+│   │   │   ├── doctor/             doctor-specific components
+│   │   │   ├── patient/            patient-specific components
+│   │   │   ├── lab/                lab-specific components
+│   │   │   └── shared/             shared components
+│   │   └── lib/                    utils, api client, hooks
+│   │
+│   └── mobile/                     (React Native Expo)
+│       ├── screens/
+│       │   ├── auth/
+│       │   ├── doctor/
+│       │   ├── patient/
+│       │   └── lab/
+│       ├── components/
+│       └── navigation/
+│
+├── packages/
+│   ├── api/                        (NestJS backend)
+│   │   ├── src/
+│   │   │   ├── auth/
+│   │   │   ├── doctors/
+│   │   │   ├── patients/
+│   │   │   ├── appointments/
+│   │   │   ├── consultations/
+│   │   │   ├── prescriptions/
+│   │   │   ├── lab-orders/
+│   │   │   ├── lab-reports/
+│   │   │   ├── referrals/
+│   │   │   ├── labs/
+│   │   │   ├── medicines/
+│   │   │   ├── calendar/
+│   │   │   ├── notifications/
+│   │   │   ├── analytics/
+│   │   │   ├── admin/
+│   │   │   ├── pdf/                PDF generation service
+│   │   │   ├── storage/            S3 file service
+│   │   │   └── sms/                SMS gateway service
+│   │   └── prisma/
+│   │       └── schema.prisma
+│   │
+│   └── shared/                     (types, constants, validators)
+│       ├── types/
+│       ├── validators/
+│       └── constants/
+│
+└── infrastructure/
+    ├── docker-compose.yml
+    ├── nginx.conf
+    └── .env.example
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 12 — SCREENS / PAGES LIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+AUTH SCREENS
+  - Landing / Marketing Page
+  - Login (phone + OTP)
+  - Doctor Registration (multi-step form)
+  - Lab Registration (multi-step form)
+  - Profile Selector (multiple family members)
+
+DOCTOR PORTAL SCREENS
+  - Dashboard (home)
+  - Patient List
+  - Patient Profile (detail)
+  - Patient History Timeline
+  - Add/Edit Patient
+  - Appointment List (with filters)
+  - New Appointment
+  - Consultation Form (live appointment)
+  - Prescription Preview & PDF
+  - Calendar View
+  - Lab Orders (list)
+  - Lab Reports (list + viewer)
+  - Referrals (sent + received)
+  - Analytics Dashboard
+  - Search Results
+  - Settings (profile, clinic, assistants, billing)
+  - Notifications
+
+PATIENT PORTAL SCREENS
+  - Dashboard (home)
+  - Find Doctor (search)
+  - Doctor Profile & Booking
+  - My Appointments
+  - Appointment Detail
+  - My Prescriptions
+  - Prescription Detail + PDF
+  - My Reports & Documents
+  - Upload Document
+  - Lab Test Booking
+  - Medicine Catalog
+  - Medicine Cart
+  - Order History
+  - Order Detail
+  - Family Members Management
+  - Health Profile
+  - Notifications
+
+LAB PORTAL SCREENS
+  - Dashboard
+  - Incoming Orders
+  - Order Detail
+  - Upload Report
+  - Reports Uploaded
+  - Home Collection Schedule
+  - Analytics
+  - Settings
+
+ADMIN SCREENS
+  - Admin Dashboard
+  - Doctor Approvals
+  - Lab Approvals
+  - User Management
+  - Platform Analytics
+  - Content Management
+  - Billing & Subscriptions
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 13 — DEVELOPMENT PHASES & MILESTONES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PHASE 1 — FOUNDATION (Weeks 1–4)
+  [ ] Project setup: monorepo, linting, CI/CD, Docker
+  [ ] Database schema design and Prisma setup
+  [ ] Auth service: OTP login, JWT, role middleware
+  [ ] Doctor registration and admin approval flow
+  [ ] Basic patient CRUD by doctor
+  [ ] Basic appointment CRUD
+  [ ] Web UI: auth screens, doctor dashboard scaffold
+
+PHASE 2 — CORE CLINICAL FEATURES (Weeks 5–8)
+  [ ] Consultation form (SOAP notes, vital signs)
+  [ ] Prescription creation with medicine list
+  [ ] Prescription PDF generation (server-side)
+  [ ] Lab order creation
+  [ ] Doctor calendar with slot management
+  [ ] Assistant role and calendar blocking
+  [ ] Patient search (all search types)
+
+PHASE 3 — PATIENT PORTAL (Weeks 9–12)
+  [ ] Patient phone/OTP login
+  [ ] Family member profile switcher
+  [ ] Appointment history view
+  [ ] Doctor search and booking flow
+  [ ] Documents/reports viewer
+  [ ] Document upload by patient
+  [ ] Lab test booking (basic)
+  [ ] Push/SMS notifications
+
+PHASE 4 — LAB PORTAL & REPORTS (Weeks 13–15)
+  [ ] Lab registration and profile
+  [ ] Lab order management (accept, status updates)
+  [ ] Report upload against Appointment ID
+  [ ] Report visibility in doctor and patient portals
+  [ ] Notifications on report upload
+
+PHASE 5 — ADVANCED FEATURES (Weeks 16–20)
+  [ ] Online medicine ordering
+  [ ] Referral system with specialist filtering
+  [ ] Analytics dashboards (doctor + admin)
+  [ ] Ratings and reviews
+  [ ] Health trend charts (vitals over time)
+  [ ] WhatsApp notifications
+  [ ] Telemedicine video (basic)
+  [ ] Drug interaction warnings
+
+PHASE 6 — MOBILE APP (Weeks 18–24, parallel)
+  [ ] React Native setup with Expo
+  [ ] Patient mobile screens
+  [ ] Doctor mobile screens (lite)
+  [ ] Push notifications
+  [ ] Camera and document upload
+  [ ] Offline mode for consultation notes
+
+PHASE 7 — POLISH & LAUNCH (Weeks 25–28)
+  [ ] UI polish (modern design, animations)
+  [ ] Performance optimisation
+  [ ] Security audit
+  [ ] Load testing
+  [ ] HIPAA/data compliance review
+  [ ] Beta testing with select doctors and patients
+  [ ] Bug fixes and feedback iteration
+  [ ] Production deployment
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 14 — NOTIFICATIONS STRATEGY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+NOTIFICATION TRIGGERS:
+  Appointment booked               → Doctor + Patient (SMS + Push)
+  Appointment reminder (24hr)      → Patient (SMS + Push)
+  Appointment reminder (1hr)       → Patient (Push)
+  Appointment status change        → Patient (SMS + Push)
+  Prescription ready               → Patient (Push + WhatsApp link)
+  Lab report uploaded              → Doctor + Patient (Push + SMS)
+  Lab order assigned               → Lab (Push)
+  Referral received                → Target doctor (Push)
+  Referral accepted                → Referring doctor + Patient (Push)
+  Medicine order shipped           → Patient (SMS + Push)
+  Doctor approved by admin         → Doctor (SMS + Email)
+  Follow-up due                    → Patient (Push, 1 day before)
+  Queue token update               → Patient (Push: "2 patients ahead")
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 15 — DESIGN GUIDELINES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VISUAL IDENTITY
+  Primary Color   : #0EA5E9 (Sky Blue — trust, health)
+  Secondary Color : #10B981 (Emerald — wellness, positive)
+  Accent Color    : #F59E0B (Amber — alerts, action)
+  Danger Color    : #EF4444 (Red — errors, cancel)
+  Background      : #F8FAFC (Off-white, soft)
+  Surface Cards   : #FFFFFF
+  Text Primary    : #0F172A
+  Text Secondary  : #64748B
+
+TYPOGRAPHY
+  Headings        : Inter or Plus Jakarta Sans (bold)
+  Body            : Inter (regular, 14-16px)
+  Monospace       : JetBrains Mono (codes, IDs)
+
+DESIGN PRINCIPLES
+  - Clean, minimal, lots of whitespace
+  - Card-based layouts
+  - Consistent icon set (Lucide or Heroicons)
+  - Mobile-first responsive design
+  - Large touch targets on mobile (min 44x44px)
+  - Skeleton loading screens
+  - Smooth micro-animations (Framer Motion)
+  - Dark mode support
+  - Accessible (WCAG 2.1 AA)
+
+KEY UI PATTERNS
+  - Top navigation bar (web) / Bottom tab bar (mobile)
+  - Floating action button for primary action (New Appointment, Add Patient)
+  - Slide-over panels for quick edits
+  - Modal for confirmations
+  - Toast notifications (non-blocking)
+  - Sticky headers on lists with search always visible
+  - Status badges with color coding on all appointment/order cards
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 16 — SECURITY & COMPLIANCE CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [ ] All API endpoints protected with JWT middleware
+  [ ] Role checks on every sensitive endpoint
+  [ ] OTP expiry: 5 minutes, max 3 attempts, 10-min lockout
+  [ ] Passwords (if any) bcrypt hashed, salt 12
+  [ ] All file uploads: type whitelist, 50MB limit, virus scan
+  [ ] S3 files accessed via pre-signed URLs (no public URLs)
+  [ ] Audit log table for: login, record access, prescription create, report upload
+  [ ] Patient data: doctor can only access their own patients (enforced in DB queries)
+  [ ] Lab can only access orders and reports of patients assigned to them
+  [ ] HTTPS enforced (HSTS headers)
+  [ ] CORS configured for known origins only
+  [ ] Rate limiting: 100 req/min per IP on public routes
+  [ ] SQL injection: parameterised queries via Prisma
+  [ ] XSS: output encoding in frontend
+  [ ] CSRF: SameSite cookies
+  [ ] Sensitive fields encrypted at rest: phone numbers, medical notes
+  [ ] Data retention policy: configurable per deployment
+  [ ] GDPR/IT Act compliance: user data export and delete on request
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 17 — THIRD-PARTY INTEGRATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  SMS              : MSG91 / Fast2SMS / Twilio
+  WhatsApp         : Twilio WhatsApp / WATI / AiSensy
+  Push             : Firebase Cloud Messaging (FCM)
+  Email            : SendGrid / AWS SES
+  Payments         : Razorpay (India) / Stripe (global)
+  Maps/Location    : Google Maps API (doctor search by location)
+  Video Calls      : Daily.co / Twilio Video / 100ms
+  Storage          : AWS S3 / Cloudflare R2
+  Drug Database    : OpenFDA API (drug interactions)
+  ICD-10 Codes     : Free ICD-10 API / WHO API
+  Analytics        : Mixpanel / PostHog (product analytics)
+  Error Tracking   : Sentry
+  Calendar Export  : iCalendar (RFC 5545)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 18 — PROMPT GUIDE FOR AI DEVELOPMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When feeding this plan to an AI coding assistant, use these structured prompts
+to build the system module by module:
+
+PROMPT 1 — PROJECT SETUP:
+  "Create a Next.js 14 + NestJS TypeScript monorepo with Prisma and PostgreSQL.
+  Set up Tailwind CSS, Shadcn/UI, and JWT authentication with OTP via SMS.
+  Create the full Prisma schema based on the data models in Section 3."
+
+PROMPT 2 — AUTH MODULE:
+  "Build the authentication module: phone OTP request and verify endpoints,
+  JWT generation with role payload (doctor, patient, lab, admin),
+  RBAC middleware, and the login/OTP screens in Next.js."
+
+PROMPT 3 — DOCTOR MODULE:
+  "Build the Doctor portal: registration flow, profile management, patient
+  CRUD, appointment management, consultation form with SOAP notes, vital signs,
+  medicine prescription, and lab order creation. Include all API endpoints from
+  Section 4 under DOCTORS, PATIENTS, APPOINTMENTS, CONSULTATIONS."
+
+PROMPT 4 — PRESCRIPTION PDF:
+  "Build a server-side PDF generation service using Puppeteer. The prescription
+  PDF should include clinic header, doctor info, patient info, vital signs,
+  diagnosis, medicine table (name/dosage/frequency/duration/instructions),
+  lab tests ordered, follow-up date, and doctor signature block."
+
+PROMPT 5 — CALENDAR MODULE:
+  "Build the doctor calendar: doctor sets weekly availability template, slots
+  auto-generated, assistant or doctor can block slots with reason, appointments
+  auto-book slots, display in Month/Week/Day view using FullCalendar.js."
+
+PROMPT 6 — PATIENT PORTAL:
+  "Build the patient portal: OTP login, family member profile switcher,
+  appointment history, doctor search with filters (speciality, illness,
+  location, availability), booking flow, documents viewer, and file upload."
+
+PROMPT 7 — LAB PORTAL:
+  "Build the lab portal: registration, incoming lab order management,
+  report upload against Appointment ID, file stored in S3, notification
+  sent to doctor and patient on upload."
+
+PROMPT 8 — NOTIFICATIONS:
+  "Build the notification system: FCM push notifications, SMS via MSG91,
+  WhatsApp via WATI, notification centre in app. Implement all triggers
+  listed in Section 14."
+
+PROMPT 9 — ANALYTICS:
+  "Build the analytics dashboard for doctors: appointments per day/month
+  bar chart, top diagnoses pie chart, new vs returning patients line chart,
+  referrals sent/received, patient demographics. Use Recharts."
+
+PROMPT 10 — MOBILE APP:
+  "Create a React Native Expo app with patient and doctor portals.
+  Implement OTP login, appointment booking, push notifications via FCM,
+  camera-based document upload, and offline consultation notes sync."
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 19 — ENVIRONMENT VARIABLES REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/medlinkpro
+
+# Auth
+JWT_SECRET=<strong-random-string>
+JWT_EXPIRY=15m
+REFRESH_TOKEN_SECRET=<another-strong-string>
+REFRESH_TOKEN_EXPIRY=7d
+
+# SMS
+MSG91_API_KEY=
+MSG91_SENDER_ID=MEDLNK
+MSG91_TEMPLATE_ID_OTP=
+
+# WhatsApp
+WATI_API_URL=
+WATI_ACCESS_TOKEN=
+
+# Firebase (Push)
+FIREBASE_PROJECT_ID=
+FIREBASE_PRIVATE_KEY=
+FIREBASE_CLIENT_EMAIL=
+
+# Storage
+AWS_REGION=ap-south-1
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_S3_BUCKET=medlinkpro-files
+
+# Payments (Razorpay)
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+
+# Video (Daily.co)
+DAILY_API_KEY=
+
+# Google Maps
+GOOGLE_MAPS_API_KEY=
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# App
+NEXT_PUBLIC_API_URL=https://api.medlinkpro.com/v1
+NEXT_PUBLIC_APP_URL=https://app.medlinkpro.com
+NODE_ENV=production
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 20 — SUMMARY ID SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Doctor ID      : DOC-00001 (auto-increment, 5 digits, padded)
+  Patient ID     : PAT-00001 (auto-increment, 5 digits, padded)
+  Lab ID         : LAB-00001 (auto-increment, 5 digits, padded)
+  Appointment ID : APT-20240601-001 (date + daily sequence)
+  Prescription ID: RX-20240601-001  (date + daily sequence)
+  Lab Order ID   : LO-20240601-001  (date + daily sequence)
+  Report ID      : RPT-20240601-001 (date + daily sequence)
+  Medicine Order : MO-20240601-001  (date + daily sequence)
+
+All IDs are human-readable, printable on physical documents, and searchable.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+END OF IMPLEMENTATION PLAN — MEDLINK PRO v1.0
+Total Sections: 20 | Estimated Development: 24–28 Weeks | Team Size: 3–5 Devs
+================================================================================
