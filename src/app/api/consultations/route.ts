@@ -15,6 +15,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Appointment not found.' }, { status: 404 });
     }
 
+    if (!appointment.patientId) {
+      return NextResponse.json({ error: 'This appointment does not have an associated patient.' }, { status: 400 });
+    }
+
     const today = new Date();
     const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
     const sequence = String(Math.floor(Math.random() * 900) + 100);

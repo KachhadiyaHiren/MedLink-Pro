@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { doctorId, patientId, familyMemberId, appointmentDate, appointmentTime, visitType, chiefComplaint } = body;
+    const { doctorId, patientId, familyMemberId, appointmentDate, appointmentTime, visitType, chiefComplaint, status } = body;
 
     // Generate appointment ID: APT-YYYYMMDD-SEQ
     const today = new Date();
@@ -41,11 +41,11 @@ export async function POST(request: NextRequest) {
       data: {
         id: appointmentId,
         doctorId,
-        patientId,
+        patientId: patientId || null,
         familyMemberId: familyMemberId || null,
         appointmentDate,
         appointmentTime,
-        status: 'scheduled',
+        status: status || 'scheduled',
         visitType,
         chiefComplaint,
         notes: ''

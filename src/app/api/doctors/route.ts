@@ -22,7 +22,24 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ doctors });
+    const doctorIds = doctors.map(d => d.id);
+    const users = await prisma.user.findMany({
+      where: {
+        id: { in: doctorIds }
+      },
+      select: {
+        id: true,
+        phone: true
+      }
+    });
+
+    const phoneMap = new Map(users.map(u => [u.id, u.phone]));
+    const doctorsWithPhone = doctors.map(d => ({
+      ...d,
+      phone: phoneMap.get(d.id) || ''
+    }));
+
+    return NextResponse.json({ doctors: doctorsWithPhone });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

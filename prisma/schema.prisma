@@ -69,7 +69,7 @@ model FamilyMember {
 model Appointment {
   id              String   @id // e.g. APT-20260601-001
   doctorId        String
-  patientId       String
+  patientId       String?
   familyMemberId  String?  // null if patient themselves
   appointmentDate String   // YYYY-MM-DD
   appointmentTime String   // HH:MM AM/PM
@@ -171,5 +171,13 @@ model Referral {
   notes              String?
   status             String   // sent, accepted, rejected, completed
   createdAt          DateTime @default(now())
+}
+
+model Assistant {
+  id        String   @id // AST-00001
+  name      String
+  phone     String   @unique
+  doctorId  String
+  createdAt DateTime @default(now())
 }
 

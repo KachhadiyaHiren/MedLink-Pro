@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
         where: { id: resolvedAppointmentId }
       });
       if (appointment) {
-        resolvedPatientId = appointment.patientId;
+        resolvedPatientId = appointment.patientId || '';
       }
     }
 

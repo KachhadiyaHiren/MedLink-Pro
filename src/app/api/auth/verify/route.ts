@@ -30,6 +30,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (role === 'assistant') {
+      const assistant = await prisma.assistant.findUnique({ where: { id: userId } });
+      if (assistant) {
+        return NextResponse.json({
+          user: {
+            id: user.id,
+            phone: user.phone,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role,
+            profilePhoto: user.profilePhoto,
+            doctorId: assistant.doctorId
+          }
+        });
+      }
+    }
+
     return NextResponse.json({ user });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
