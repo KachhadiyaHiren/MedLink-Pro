@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { appointmentId, subjective, objective, assessment, plan, vitalSigns, medicines, tests, followUpDate } = body;
+    const { appointmentId, subjective, objective, assessment, plan, vitalSigns, medicines, tests, followUpDate, clinicId } = body;
 
     // Find appointment details
     const appointment = await prisma.appointment.findUnique({
@@ -40,7 +40,8 @@ export async function POST(request: NextRequest) {
         spo2: vitalSigns.spo2 || null,
         weight: vitalSigns.weight || null,
         height: vitalSigns.height || null,
-        followUpDate: followUpDate || null
+        followUpDate: followUpDate || null,
+        clinicId: clinicId || null
       }
     });
 
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
           familyMemberId: appointment.familyMemberId || null,
           validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           notes: plan,
+          clinicId: clinicId || null,
           medicinesJson: JSON.stringify(medicines)
         }
       });
@@ -96,6 +98,36 @@ export async function POST(request: NextRequest) {
       prescription,
       labOrder
     });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const doctorId = searchParams.get('doctorId') || '';
+    const patientId = searchParams.get('patientId') || '';
+
+    let appointmentIds: string[] | undefined = undefined;
+    if (doctorId || patientId) {
+      const apps = await prisma.appointment.findMany({
+        where: {
+          AND: [
+            doctorId ? { doctorId } : {},
+            patientId ? { patientId } : {}
+          ]
+        },
+        select: { id: true }
+      });
+      appointmentIds = apps.map(a => a.id);
+    }
+
+    const consultations = await prisma.consultation.findMany({
+      where: appointmentIds ? { appointmentId: { in: appointmentIds } } : {},
+      orderBy: { createdAt: 'desc' }
+    });
+    return NextResponse.json({ consultations });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

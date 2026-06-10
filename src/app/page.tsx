@@ -30,6 +30,7 @@ interface Doctor {
   reviewsCount: number;
   isApproved: boolean;
   phone?: string;
+  signatureUrl?: string | null;
 }
 
 interface Patient {
@@ -112,6 +113,7 @@ interface LabOrder {
   testsJson: string;
   status: string;
   notes: string | null;
+  createdAt: string;
 }
 
 interface LabReport {
@@ -147,6 +149,16 @@ interface CartItem {
   qty: number;
 }
 
+interface AppNotification {
+  id: string;
+  type: "consultation" | "medicine" | "reminder" | "alert" | "info";
+  title: string;
+  message: string;
+  time: string;
+  read: boolean;
+  forRoles: string[];
+}
+
 interface PendingApproval {
   id: string;
   name: string;
@@ -154,7 +166,7 @@ interface PendingApproval {
   type: string;
 }
 
-export default function MedLinkApp() {
+export default function HealOne360App() {
   // --- AUTH STATE ---
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loginRole, setLoginRole] = useState<string | null>(null);
@@ -164,13 +176,82 @@ export default function MedLinkApp() {
   const [otpSent, setOtpSent] = useState<boolean>(false);
   const [otpCode, setOtpCode] = useState<string>("1234");
 
+  // --- TOUR & LANDING STATE ---
+  const [activeTourTab, setActiveTourTab] = useState<string>("dashboard");
+  const [activeFolderTab, setActiveFolderTab] = useState<"medical" | "dental">("medical");
+
+  // --- DENTAL SUITE STATE ---
+  const [activeDentalTab, setActiveDentalTab] = useState<string>("odontogram");
+  const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
+  const [toothNoteInput, setToothNoteInput] = useState<string>("");
+  const [treatmentProcedureInput, setTreatmentProcedureInput] = useState<string>("Composite Filling");
+  const [treatmentNotesInput, setTreatmentNotesInput] = useState<string>("");
+  const [recallTypeInput, setRecallTypeInput] = useState<string>("Routine Scaling & Exam");
+  const [recallDateInput, setRecallDateInput] = useState<string>("");
+  const [recallNotesInput, setRecallNotesInput] = useState<string>("");
+  
+  // Dental chart dictionary patientId -> toothNumber -> status
+  const [odontogramData, setOdontogramData] = useState<Record<string, Record<number, string>>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("healone_odontogram");
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
+
+  // Dental tooth notes patientId -> toothNumber -> note string
+  const [toothNotes, setToothNotes] = useState<Record<string, Record<number, string>>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("healone_tooth_notes");
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
+
+  // Treatment plans patientId -> array of procedures
+  const [treatmentPlans, setTreatmentPlans] = useState<Record<string, any[]>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("healone_treatment_plans");
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
+
+  // Dental recalls patientId -> array of recalls
+  const [dentalRecalls, setDentalRecalls] = useState<Record<string, any[]>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("healone_recalls");
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
+
+  // Sync to localStorage
+  useEffect(() => {
+    localStorage.setItem("healone_odontogram", JSON.stringify(odontogramData));
+  }, [odontogramData]);
+
+  useEffect(() => {
+    localStorage.setItem("healone_tooth_notes", JSON.stringify(toothNotes));
+  }, [toothNotes]);
+
+  useEffect(() => {
+    localStorage.setItem("healone_treatment_plans", JSON.stringify(treatmentPlans));
+  }, [treatmentPlans]);
+
+  useEffect(() => {
+    localStorage.setItem("healone_recalls", JSON.stringify(dentalRecalls));
+  }, [dentalRecalls]);
+
   // --- APPLICATION DATA STATE ---
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
   const [labReports, setLabReports] = useState<LabReport[]>([]);
+  const [consultations, setConsultations] = useState<any[]>([]);
   const [medicines, setMedicines] = useState<MedicinesCatalog[]>([]);
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [assistants, setAssistants] = useState<any[]>([]);
   const [allAssistants, setAllAssistants] = useState<any[]>([]);
@@ -188,6 +269,7 @@ export default function MedLinkApp() {
   const [selectedPatDetailId, setSelectedPatDetailId] = useState<string>(""); // For doctor viewing patient folder
   const [doctorSpecialtyFilter, setDoctorSpecialtyFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [doctorSignatureUrl, setDoctorSignatureUrl] = useState<string>("");
 
   // Expandable toggles in Patients Directory
   const [expandedDetailsPatientIds, setExpandedDetailsPatientIds] = useState<Record<string, boolean>>({});
@@ -201,6 +283,20 @@ export default function MedLinkApp() {
   const [isLabUploadOpen, setIsLabUploadOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
+  // Doctor Enrollment (self-registration) states
+  const [isDoctorEnrollOpen, setIsDoctorEnrollOpen] = useState(false);
+  const [enrollName, setEnrollName] = useState("");
+  const [enrollPhone, setEnrollPhone] = useState("");
+  const [enrollSpeciality, setEnrollSpeciality] = useState("");
+  const [enrollQual, setEnrollQual] = useState("");
+  const [enrollRegNo, setEnrollRegNo] = useState("");
+  const [enrollClinicName, setEnrollClinicName] = useState("");
+  const [enrollClinicAddress, setEnrollClinicAddress] = useState("");
+  const [enrollFee, setEnrollFee] = useState("");
+  const [enrollBio, setEnrollBio] = useState("");
+  const [enrollLanguages, setEnrollLanguages] = useState("English");
+  const [enrollDays, setEnrollDays] = useState("Mon,Tue,Wed,Thu,Fri");
+
   // --- MODALS DATA CONTEXTS ---
   const [bookingDoctorId, setBookingDoctorId] = useState<string>("");
   const [bookingDate, setBookingDate] = useState<string>("");
@@ -208,7 +304,10 @@ export default function MedLinkApp() {
   const [bookingVisitType, setBookingVisitType] = useState<string>("first-visit");
   const [bookingComplaint, setBookingComplaint] = useState<string>("");
   const [bookingPatientId, setBookingPatientId] = useState<string>("");
+  const [bookingFamilyMemberId, setBookingFamilyMemberId] = useState<string>("");
   const [bookingSlots, setBookingSlots] = useState<string[]>([]);
+  const [bookingSearchVal, setBookingSearchVal] = useState<string>("");
+  const [bookingSearchDone, setBookingSearchDone] = useState<boolean>(false);
 
   // SOAP Form states
   const [soapAppId, setSoapAppId] = useState<string>("");
@@ -227,6 +326,13 @@ export default function MedLinkApp() {
   const [soapPrescribedMeds, setSoapPrescribedMeds] = useState<any[]>([]);
   const [soapSelectedMedId, setSoapSelectedMedId] = useState<string>("");
   const [soapTestsChecked, setSoapTestsChecked] = useState<Record<string, boolean>>({});
+  const [soapClinicId, setSoapClinicId] = useState<string>(""); // empty = primary clinic
+
+  // Doctor Clinics management states
+  const [doctorClinics, setDoctorClinics] = useState<any[]>([]);
+  const [newClinicName, setNewClinicName] = useState("");
+  const [newClinicAddress, setNewClinicAddress] = useState("");
+  const [newClinicPhone, setNewClinicPhone] = useState("");
 
   // Prescription preview context
   const [previewRx, setPreviewRx] = useState<any | null>(null);
@@ -264,6 +370,17 @@ export default function MedLinkApp() {
   const [directUploadFindings, setDirectUploadFindings] = useState("");
   const [directUploadNotes, setDirectUploadNotes] = useState("");
   const [directUploadFileName, setDirectUploadFileName] = useState("");
+  const [directUploadFile, setDirectUploadFile] = useState<File | null>(null);
+
+  // Lab portal dashboard upload states
+  const [labDashAppId, setLabDashAppId] = useState("");
+  const [labDashTitle, setLabDashTitle] = useState("");
+  const [labDashType, setLabDashType] = useState("blood-test");
+  const [labDashFileName, setLabDashFileName] = useState("");
+  const [labDashFile, setLabDashFile] = useState<File | null>(null);
+
+  // In-session blob URL map: reportId -> blobUrl (for view/download of uploaded PDFs)
+  const [reportBlobUrls, setReportBlobUrls] = useState<Record<string, string>>({});
 
   // Lab Order Upload state
   const [uploadFileName, setUploadFileName] = useState("");
@@ -282,6 +399,30 @@ export default function MedLinkApp() {
   const [hoveredBarIdx, setHoveredBarIdx] = useState<number | null>(null);
   const [hoveredDonutIdx, setHoveredDonutIdx] = useState<number | null>(null);
   const [expandedReferredDocId, setExpandedReferredDocId] = useState<string | null>(null);
+
+  // Notification system states
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([
+    { id: "n1", type: "consultation", title: "Upcoming Consultation", message: "You have an appointment with Dr. Meera Sharma (Dermatology) tomorrow at 10:30 AM.", time: "2 min ago", read: false, forRoles: ["patient"] },
+    { id: "n2", type: "medicine", title: "Medicine Reminder", message: "Time to purchase Metformin 500mg — your current supply ends in 3 days. Refill from the pharmacy.", time: "15 min ago", read: false, forRoles: ["patient"] },
+    { id: "n3", type: "reminder", title: "Follow-up Due", message: "Your follow-up visit with Dr. Arjun Patel (Cardiology) is scheduled for June 8, 2026.", time: "1 hr ago", read: false, forRoles: ["patient"] },
+    { id: "n5", type: "alert", title: "Lab Report Ready", message: "Your CBC blood test results are now available. View them in the Lab History section.", time: "5 hrs ago", read: true, forRoles: ["patient"] },
+    { id: "n6", type: "info", title: "Health Tip", message: "Remember to stay hydrated! Drink at least 8 glasses of water daily for optimal health.", time: "1 day ago", read: true, forRoles: ["patient"] },
+    { id: "n7", type: "consultation", title: "Next Patient in 15 mins", message: "Rahul Verma (PAT-1002) is scheduled for a first-visit consultation at 11:00 AM today.", time: "Just now", read: false, forRoles: ["doctor", "assistant"] },
+    { id: "n8", type: "consultation", title: "Upcoming Consultation", message: "Priya Singh (PAT-1005) has a follow-up appointment tomorrow at 09:30 AM — review notes.", time: "10 min ago", read: false, forRoles: ["doctor", "assistant"] },
+    { id: "n9", type: "alert", title: "Urgent Referral Received", message: "Dr. Kavita Rao referred Ankit Mehta for emergency cardiac evaluation. Review referral details.", time: "30 min ago", read: false, forRoles: ["doctor"] },
+    { id: "n10", type: "reminder", title: "Pending Lab Reviews", message: "3 lab reports from today's patients are awaiting your review in the diagnostics queue.", time: "2 hrs ago", read: true, forRoles: ["doctor"] },
+    { id: "n11", type: "medicine", title: "Prescription Renewal Request", message: "Sanjay Kumar (PAT-1008) has requested a renewal for Amlodipine 5mg. Review and approve.", time: "4 hrs ago", read: true, forRoles: ["doctor"] },
+    { id: "n12", type: "info", title: "Schedule Updated", message: "Your availability for next Monday has been updated by your assistant. 8 slots are now open.", time: "1 day ago", read: true, forRoles: ["doctor", "assistant"] },
+  ]);
+
+  // Mobile sidebar toggle
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleNavClick = (page: string) => {
+    setActivePage(page);
+    setIsMobileMenuOpen(false);
+  };
 
   const openViewReportsModal = async (appId: string) => {
     setViewReportsAppId(appId);
@@ -326,27 +467,61 @@ export default function MedLinkApp() {
     }
   };
 
-  // Fetch referrals and assistants when logged in
+  const fetchDoctorClinics = async () => {
+    if (!currentUser || currentUser.role !== "doctor") return;
+    try {
+      const res = await fetch(`/api/doctor-clinics?doctorId=${currentUser.id}`);
+      const data = await res.json();
+      if (res.ok && data.clinics) {
+        setDoctorClinics(data.clinics);
+      }
+    } catch (e) {
+      console.error("Failed loading doctor clinics list", e);
+    }
+  };
+
+  // Fetch referrals and assistants when logged in, and trigger data load
   useEffect(() => {
+    loadData();
     if (currentUser && (currentUser.role === "doctor" || currentUser.role === "assistant")) {
       fetchReferrals();
       if (currentUser.role === "doctor") {
         fetchAssistants();
+        fetchDoctorClinics();
       }
     } else {
       setSentReferrals([]);
       setReceivedReferrals([]);
       setAssistants([]);
+      setDoctorClinics([]);
     }
   }, [currentUser]);
 
-  // --- MOUNT TRIGGERS ---
+  // Set doctor's signature url state when doctors or currentUser changes
   useEffect(() => {
-    loadData();
-  }, []);
+    if (currentUser && currentUser.role === "doctor" && doctors.length > 0) {
+      const activeDoc = doctors.find(d => d.id === currentUser.id);
+      if (activeDoc) {
+        setDoctorSignatureUrl(activeDoc.signatureUrl || "");
+      }
+    } else if (!currentUser) {
+      setDoctorSignatureUrl("");
+    }
+  }, [currentUser, doctors]);
 
   async function loadData() {
     try {
+      // Determine query filters based on logged in user
+      let queryParams = "";
+      if (currentUser) {
+        if (currentUser.role === "doctor" || currentUser.role === "assistant") {
+          const docId = currentUser.role === "doctor" ? currentUser.id : currentUser.doctorId;
+          queryParams = `?doctorId=${docId}`;
+        } else if (currentUser.role === "patient") {
+          queryParams = `?patientId=${currentUser.id}`;
+        }
+      }
+
       const resDocs = await fetch("/api/doctors?includePending=true");
       const dataDocs = await resDocs.json();
       if (dataDocs.doctors) setDoctors(dataDocs.doctors);
@@ -355,17 +530,21 @@ export default function MedLinkApp() {
       const dataPats = await resPats.json();
       if (dataPats.patients) setPatients(dataPats.patients);
 
-      const resApps = await fetch("/api/appointments");
+      const resApps = await fetch(`/api/appointments${queryParams}`);
       const dataApps = await resApps.json();
       if (dataApps.appointments) setAppointments(dataApps.appointments);
 
-      const resLabs = await fetch("/api/lab-orders");
+      const resLabs = await fetch(`/api/lab-orders${queryParams}`);
       const dataLabs = await resLabs.json();
       if (dataLabs.labOrders) setLabOrders(dataLabs.labOrders);
 
-      const resReports = await fetch("/api/lab-reports");
+      const resReports = await fetch(`/api/lab-reports${queryParams}`);
       const dataReports = await resReports.json();
       if (dataReports.labReports) setLabReports(dataReports.labReports);
+
+      const resConsults = await fetch(`/api/consultations${queryParams}`);
+      const dataConsults = await resConsults.json();
+      if (dataConsults.consultations) setConsultations(dataConsults.consultations);
 
       const resMeds = await fetch("/api/medicines");
       const dataMeds = await resMeds.json();
@@ -373,6 +552,10 @@ export default function MedLinkApp() {
         setMedicines(dataMeds.medicines);
         if (dataMeds.medicines.length > 0) setSoapSelectedMedId(dataMeds.medicines[0].id);
       }
+
+      const resRxAll = await fetch(`/api/prescriptions${queryParams}`);
+      const dataRxAll = await resRxAll.json();
+      if (dataRxAll.prescriptions) setPrescriptions(dataRxAll.prescriptions);
 
       const resPending = await fetch("/api/admin/approvals");
       const dataPending = await resPending.json();
@@ -422,7 +605,8 @@ export default function MedLinkApp() {
 
   const fillDemoPhone = (role: string, id: string) => {
     if (role === "doctor") {
-      setLoginPhone("9876500001");
+      const doc = doctors.find(d => d.id === id);
+      setLoginPhone(doc?.phone || "");
     } else if (role === "patient") {
       const pat = patients.find(p => p.id === id);
       setLoginPhone(pat ? pat.primaryPhone : "");
@@ -542,12 +726,14 @@ export default function MedLinkApp() {
     setSoapReferUrgency("routine");
     setSoapReferNotes("");
 
+    setSoapClinicId(""); // default to primary clinic
+
     setIsSoapOpen(true);
   };
 
-  const handleLogConsultClick = async (patId: string) => {
+  const handleLogConsultClick = async (patId: string, familyMemberId: string | null = null) => {
     const existingApp = appointments.find(
-      a => a.patientId === patId && a.doctorId === currentUser?.id && a.status === "scheduled"
+      a => a.patientId === patId && a.familyMemberId === familyMemberId && a.doctorId === currentUser?.id && a.status === "scheduled"
     );
 
     if (existingApp) {
@@ -556,14 +742,14 @@ export default function MedLinkApp() {
       try {
         const todayStr = new Date().toISOString().split("T")[0];
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
+
         const res = await fetch("/api/appointments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             doctorId: currentUser?.id,
             patientId: patId,
-            familyMemberId: null,
+            familyMemberId: familyMemberId,
             appointmentDate: todayStr,
             appointmentTime: timeStr,
             visitType: "first-visit",
@@ -626,6 +812,143 @@ export default function MedLinkApp() {
     setSoapPrescribedMeds(soapPrescribedMeds.filter((_, i) => i !== idx));
   };
 
+  // --- DENTAL SUITE UTILITIES ---
+  const DENTAL_PROCEDURES = [
+    { name: "Composite Filling", cost: 1500 },
+    { name: "Root Canal Treatment", cost: 4500 },
+    { name: "Porcelain Crown", cost: 6000 },
+    { name: "Simple Extraction", cost: 1200 },
+    { name: "Deep Scaling", cost: 2000 }
+  ];
+
+  const getToothStatusClass = (toothNum: number, patId: string) => {
+    const patientOdontogram = odontogramData[patId] || {};
+    const status = patientOdontogram[toothNum];
+    if (status === "decayed") return "decayed";
+    if (status === "filled") return "filled";
+    if (status === "crown") return "crown";
+    if (status === "missing") return "missing";
+    return "";
+  };
+
+  const getToothStatusChar = (toothNum: number, patId: string) => {
+    const patientOdontogram = odontogramData[patId] || {};
+    const status = patientOdontogram[toothNum];
+    if (status === "decayed") return "D";
+    if (status === "filled") return "F";
+    if (status === "crown") return "C";
+    if (status === "missing") return "M";
+    return "H";
+  };
+
+  const handleToothClick = (toothNum: number, patId: string) => {
+    setSelectedTooth(toothNum);
+    const patientToothNotes = toothNotes[patId] || {};
+    const existingNote = patientToothNotes[toothNum] || "";
+    setToothNoteInput(existingNote);
+  };
+
+  const handleUpdateToothStatus = (status: string, patId: string) => {
+    if (selectedTooth === null) return;
+    const patientOdontogram = odontogramData[patId] || {};
+    const updatedPatData = {
+      ...patientOdontogram,
+      [selectedTooth]: status
+    };
+    setOdontogramData({
+      ...odontogramData,
+      [patId]: updatedPatData
+    });
+  };
+
+  const handleSaveToothNote = (patId: string) => {
+    if (selectedTooth === null) return;
+    const patientToothNotes = toothNotes[patId] || {};
+    const updatedPatNotes = {
+      ...patientToothNotes,
+      [selectedTooth]: toothNoteInput
+    };
+    setToothNotes({
+      ...toothNotes,
+      [patId]: updatedPatNotes
+    });
+    alert(`Notes saved for Tooth #${selectedTooth}.`);
+  };
+
+  const handleAddTreatmentPlan = (patId: string) => {
+    const toothLabel = selectedTooth ? `Tooth #${selectedTooth}` : "General";
+    const cost = DENTAL_PROCEDURES.find(p => p.name === treatmentProcedureInput)?.cost || 0;
+    
+    const newItem = {
+      id: "TP-" + Date.now(),
+      date: new Date().toISOString().split("T")[0],
+      tooth: toothLabel,
+      procedure: treatmentProcedureInput,
+      cost: cost,
+      notes: treatmentNotesInput || ""
+    };
+    
+    const updatedPlans = {
+      ...treatmentPlans,
+      [patId]: [...(treatmentPlans[patId] || []), newItem]
+    };
+    setTreatmentPlans(updatedPlans);
+    setTreatmentNotesInput("");
+  };
+
+  const handleDeleteTreatmentPlan = (itemId: string, patId: string) => {
+    const updatedPlans = {
+      ...treatmentPlans,
+      [patId]: (treatmentPlans[patId] || []).filter(item => item.id !== itemId)
+    };
+    setTreatmentPlans(updatedPlans);
+  };
+
+  const handleAddRecall = (patId: string) => {
+    if (!recallDateInput) {
+      alert("Please select a due date for the recall.");
+      return;
+    }
+    
+    const newItem = {
+      id: "RC-" + Date.now(),
+      type: recallTypeInput,
+      dueDate: recallDateInput,
+      notes: recallNotesInput || "",
+      status: "scheduled"
+    };
+    
+    const updatedRecalls = {
+      ...dentalRecalls,
+      [patId]: [...(dentalRecalls[patId] || []), newItem]
+    };
+    setDentalRecalls(updatedRecalls);
+    setRecallDateInput("");
+    setRecallNotesInput("");
+  };
+
+  const handleToggleRecallStatus = (itemId: string, patId: string) => {
+    const list = dentalRecalls[patId] || [];
+    const updatedList = list.map(item => {
+      if (item.id === itemId) {
+        return { ...item, status: item.status === "scheduled" ? "completed" : "scheduled" };
+      }
+      return item;
+    });
+    setDentalRecalls({
+      ...dentalRecalls,
+      [patId]: updatedList
+    });
+  };
+
+  const handleDeleteRecall = (itemId: string, patId: string) => {
+    const updatedRecalls = {
+      ...dentalRecalls,
+      [patId]: (dentalRecalls[patId] || []).filter(item => item.id !== itemId)
+    };
+    setDentalRecalls(updatedRecalls);
+  };
+
   const updateSoapMedField = (idx: number, field: string, val: string) => {
     const list = [...soapPrescribedMeds];
     list[idx][field] = val;
@@ -665,7 +988,8 @@ export default function MedLinkApp() {
           },
           medicines: soapPrescribedMeds,
           tests: selectedTests,
-          followUpDate: soapFollowUp
+          followUpDate: soapFollowUp,
+          clinicId: soapClinicId || null
         })
       });
 
@@ -690,7 +1014,7 @@ export default function MedLinkApp() {
           try {
             const app = appointments.find(a => a.id === soapAppId) || (data.consultation ? { patientId: data.consultation.patientId } : null);
             const patientId = app ? app.patientId : selectedPatDetailId;
-            
+
             await fetch("/api/referrals", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -727,7 +1051,7 @@ export default function MedLinkApp() {
 
   const loadPrescriptionPrint = async (rxId: string, appId?: string) => {
     try {
-      const url = appId 
+      const url = appId
         ? `/api/prescriptions?appointmentId=${appId}`
         : `/api/prescriptions?prescriptionId=${rxId}`;
       const res = await fetch(url);
@@ -735,6 +1059,11 @@ export default function MedLinkApp() {
       if (res.ok && data.rx) {
         setPreviewRx(data);
         setIsPrescriptionOpen(true);
+      } else if (res.status === 404) {
+        const msg = data?.reason === 'referred'
+          ? "This case was referred to a specialist. No prescription slip was issued."
+          : "No prescription was issued for this consultation. The doctor did not prescribe any medicines.";
+        alert(msg);
       } else {
         alert("Failed loading prescription details.");
       }
@@ -786,7 +1115,7 @@ export default function MedLinkApp() {
       alert("Error submitting registration form.");
     }
   };
-  
+
   const handleRegisterAssistant = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAssistantName || !newAssistantPhone) {
@@ -841,6 +1170,84 @@ export default function MedLinkApp() {
     }
   };
 
+  const handleSaveSignature = async () => {
+    if (!currentUser || currentUser.role !== "doctor") return;
+    try {
+      const res = await fetch("/api/doctors", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: currentUser.id,
+          signatureUrl: doctorSignatureUrl
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.doctor) {
+        alert("Signature saved successfully!");
+        setDoctors(prev => prev.map(d => d.id === currentUser.id ? { ...d, signatureUrl: data.doctor.signatureUrl } : d));
+      } else {
+        alert(data.error || "Failed to save signature.");
+      }
+    } catch (err) {
+      alert("Error saving signature.");
+    }
+  };
+
+  const handleResetSignature = () => {
+    if (!currentUser) return;
+    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80" viewBox="0 0 200 80"><path d="M 15 40 Q 55 15 105 45 T 185 30" fill="none" stroke="%230ea5e9" stroke-width="3" stroke-linecap="round"/><text x="30" y="48" font-family="'Brush Script MT', cursive, sans-serif" font-size="26" fill="%231e3a8a">${currentUser.fullName}</text></svg>`;
+    const base64Svg = `data:image/svg+xml;utf8,${svgContent}`;
+    setDoctorSignatureUrl(base64Svg);
+  };
+
+  // --- CLINIC MANAGEMENT HANDLERS ---
+  const handleAddClinic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    try {
+      const res = await fetch("/api/doctor-clinics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          doctorId: currentUser.id,
+          name: newClinicName,
+          address: newClinicAddress,
+          phone: newClinicPhone
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.clinic) {
+        alert("Clinic added successfully!");
+        setNewClinicName("");
+        setNewClinicAddress("");
+        setNewClinicPhone("");
+        fetchDoctorClinics();
+      } else {
+        alert(data.error || "Failed to add clinic.");
+      }
+    } catch (err) {
+      alert("Error adding clinic.");
+    }
+  };
+
+  const handleDeleteClinic = async (clinicId: string) => {
+    if (!confirm("Are you sure you want to remove this clinic?")) return;
+    try {
+      const res = await fetch(`/api/doctor-clinics?clinicId=${clinicId}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("Clinic removed successfully!");
+        fetchDoctorClinics();
+      } else {
+        alert(data.error || "Failed to remove clinic.");
+      }
+    } catch (err) {
+      alert("Error removing clinic.");
+    }
+  };
+
   // --- PATIENT INTERACTION METHODS ---
   const handleBookAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -863,7 +1270,7 @@ export default function MedLinkApp() {
           return;
         }
         patId = bookingPatientId;
-        famMemberId = null;
+        famMemberId = bookingFamilyMemberId || null;
       }
     }
 
@@ -1035,16 +1442,21 @@ export default function MedLinkApp() {
           appointmentId: directUploadAppId,
           reportTitle: directUploadTitle,
           reportType: directUploadType,
-          findings: directUploadFindings,
-          notes: directUploadNotes,
+          findings: "",
+          notes: "",
           uploadedBy: currentUser?.id,
           fileName: directUploadFileName || "imaging_result_report.pdf",
-          fileUrl: `/uploads/${directUploadFileName || "imaging_result_report.pdf"}`
+          fileUrl: directUploadFileName ? `/uploads/${directUploadFileName}` : null
         })
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
+        // Store a blob URL for in-session view/download
+        if (directUploadFile && data.labReport?.id) {
+          const blobUrl = URL.createObjectURL(directUploadFile);
+          setReportBlobUrls(prev => ({ ...prev, [data.labReport.id]: blobUrl }));
+        }
         alert("Diagnostic findings file uploaded and synced to doctor files!");
         setIsDirectUploadOpen(false);
         setDirectUploadAppId("");
@@ -1053,9 +1465,55 @@ export default function MedLinkApp() {
         setDirectUploadFindings("");
         setDirectUploadNotes("");
         setDirectUploadFileName("");
+        setDirectUploadFile(null);
         loadData();
       } else {
         alert(data.error || "Failed uploading findings file.");
+      }
+    } catch (e) {
+      alert("Error uploading report.");
+    }
+  };
+
+  const handleLabDashboardUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!labDashAppId) {
+      alert("Please enter a valid appointment ID.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/lab-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appointmentId: labDashAppId,
+          reportTitle: labDashTitle,
+          reportType: labDashType,
+          findings: "",
+          notes: "",
+          uploadedBy: currentUser?.id || "LAB-00001",
+          fileName: labDashFileName || "lab_result_report.pdf",
+          fileUrl: labDashFileName ? `/uploads/${labDashFileName}` : null
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        // Store a blob URL for in-session view/download
+        if (labDashFile && data.labReport?.id) {
+          const blobUrl = URL.createObjectURL(labDashFile);
+          setReportBlobUrls(prev => ({ ...prev, [data.labReport.id]: blobUrl }));
+        }
+        alert("Diagnostic laboratory findings file uploaded and synced successfully!");
+        setLabDashAppId("");
+        setLabDashTitle("");
+        setLabDashType("blood-test");
+        setLabDashFileName("");
+        setLabDashFile(null);
+        loadData();
+      } else {
+        alert(data.error || "Failed uploading diagnostic report. Please check the Appointment ID.");
       }
     } catch (e) {
       alert("Error uploading report.");
@@ -1082,6 +1540,52 @@ export default function MedLinkApp() {
     }
   };
 
+  // Doctor self-enrollment handler
+  const handleDoctorEnroll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const today = new Date();
+      const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+      const seq = String(Math.floor(Math.random() * 9000) + 1000);
+      const docId = `DOC-${dateStr}-${seq}`;
+
+      const res = await fetch("/api/doctors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: docId,
+          name: enrollName,
+          phone: enrollPhone,
+          speciality: enrollSpeciality,
+          qualifications: enrollQual,
+          registrationNo: enrollRegNo,
+          clinicName: enrollClinicName,
+          clinicAddress: enrollClinicAddress,
+          consultationFee: parseFloat(enrollFee) || 0,
+          bio: enrollBio,
+          languages: enrollLanguages,
+          availableDays: enrollDays
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.doctor) {
+        setIsDoctorEnrollOpen(false);
+        // Reset form
+        setEnrollName(""); setEnrollPhone(""); setEnrollSpeciality("");
+        setEnrollQual(""); setEnrollRegNo(""); setEnrollClinicName("");
+        setEnrollClinicAddress(""); setEnrollFee(""); setEnrollBio("");
+        setEnrollLanguages("English"); setEnrollDays("Mon,Tue,Wed,Thu,Fri");
+        alert(`✅ Registration submitted!\n\nYour Doctor ID is: ${docId}\n\nYour application is pending review by the System Administrator. You will be able to log in once your credentials have been approved.`);
+        loadData();
+      } else {
+        alert(data.error || "Enrollment failed. Please check your details.");
+      }
+    } catch (e) {
+      alert("Error submitting enrollment. Please try again.");
+    }
+  };
+
   // --- STATIC CATALOG DATA ---
   const dbTestsCatalog = [
     { test_code: "LIPID", name: "Lipid Profile (Cholesterol, HDL, LDL)" },
@@ -1101,105 +1605,812 @@ export default function MedLinkApp() {
 
   // A. LOGIN & LANDING VIEW RENDER
   if (!currentUser) {
-    return (
-      <div id="app-container">
-        <div id="auth-view">
-          <header className="auth-header">
-            <div className="logo">
-              <i className="fa-solid fa-house-chimney-medical"></i>
-              MedLink<span>Pro</span>
+    if (loginRole) {
+      // Return a clean OTP verification view
+      return (
+        <div id="app-container" style={{ justifyContent: "center", alignItems: "center", minHeight: "100vh", background: "radial-gradient(circle at 10% 20%, rgba(14, 165, 233, 0.06) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.06) 0%, transparent 40%)" }}>
+          <div className="otp-box" style={{ display: "block" }}>
+            <div style={{ marginBottom: "1.5rem" }}>
+              <a onClick={() => setLoginRole(null)} style={{ cursor: "pointer", color: "var(--primary)", fontSize: "0.85rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                <i className="fa-solid fa-arrow-left"></i> Back to homepage
+              </a>
             </div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>
-              <i className="fa-solid fa-shield-halved"></i> Full-Stack Sandbox (SQLite)
-            </div>
-          </header>
+            <h2 style={{ marginBottom: "0.5rem", fontSize: "1.5rem" }}>
+              {loginRole === "doctor" ? "Doctor Portal" : loginRole === "patient" ? "Patient Portal" : loginRole === "lab" ? "Lab Partner Portal" : loginRole === "assistant" ? "Receptionist Hub" : "Administrator Portal"}
+            </h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
+              Verify credential OTP to establish secure database session.
+            </p>
 
-          <main className="auth-main">
-            <h1 className="auth-title">Complete Healthcare Portal</h1>
-            <p className="auth-subtitle">Seamless database-driven clinical workspace. Select a role to verify authentication.</p>
-
-            {!loginRole ? (
-              <div className="role-grid">
-                <div className="role-card" onClick={() => handleRoleSelection("doctor")}>
-                  <div className="role-icon"><i className="fa-solid fa-user-doctor"></i></div>
-                  <h3>Doctor Portal</h3>
-                  <p>Practice dashboards, SOAP entries, print RX, and patient history.</p>
-                </div>
-                <div className="role-card" onClick={() => handleRoleSelection("patient")}>
-                  <div className="role-icon"><i className="fa-solid fa-hospital-user"></i></div>
-                  <h3>Patient Portal</h3>
-                  <p>Check records wallet, book consultations, and checkout prescriptions pharmacy.</p>
-                </div>
-                <div className="role-card" onClick={() => handleRoleSelection("lab")}>
-                  <div className="role-icon"><i className="fa-solid fa-flask-vial"></i></div>
-                  <h3>Lab Portal</h3>
-                  <p>Claim test orders, manage queues, and upload digital reports.</p>
-                </div>
-                <div className="role-card" onClick={() => handleRoleSelection("admin")}>
-                  <div className="role-icon"><i className="fa-solid fa-user-gear"></i></div>
-                  <h3>Admin Panel</h3>
-                  <p>Review credentials approvals, verify accounts, and check platform statistics.</p>
-                </div>
-                <div className="role-card" onClick={() => handleRoleSelection("assistant")}>
-                  <div className="role-icon"><i className="fa-solid fa-user-tie"></i></div>
-                  <h3>Receptionist Portal</h3>
-                  <p>Book doctor appointments, register walk-in patients, and block calendar slots.</p>
-                </div>
+            <form onSubmit={verifyDemoLogin}>
+              <div className="form-group">
+                <label>Select Account Profile</label>
+                <select value={selectedDemoAccount} onChange={(e) => handleDemoAccountChange(e.target.value)}>
+                  {demoAccounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.label}</option>
+                  ))}
+                </select>
               </div>
-            ) : (
-              <div className="otp-box" style={{ display: "block" }}>
-                <div style={{ marginBottom: "1.5rem" }}>
-                  <a onClick={() => setLoginRole(null)} style={{ cursor: "pointer", color: "var(--primary)", fontSize: "0.85rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-                    <i className="fa-solid fa-arrow-left"></i> Back to selection
-                  </a>
+
+              <div className="form-group">
+                <label>Registered Phone</label>
+                <input type="tel" value={loginPhone} readOnly style={{ backgroundColor: "var(--background)", cursor: "not-allowed" }} />
+              </div>
+
+              {otpSent && (
+                <div className="form-group">
+                  <label>Verification Code (OTP)</label>
+                  <input type="text" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} maxLength={4} style={{ textAlign: "center", fontSize: "1.25rem", fontWeight: 700 }} />
                 </div>
-                <h2 style={{ marginBottom: "0.5rem", fontSize: "1.5rem" }}>
-                  {loginRole === "doctor" ? "Doctor Login" : loginRole === "patient" ? "Patient Login" : loginRole === "lab" ? "Lab Partner Login" : loginRole === "assistant" ? "Receptionist Login" : "Admin Panel Access"}
-                </h2>
-                <p style={{ color: "var(--text-secondary)", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
-                  Enter verified phone OTP code to access the database sandbox.
-                </p>
+              )}
 
-                <form onSubmit={verifyDemoLogin}>
-                  <div className="form-group">
-                    <label>Select Demo Account</label>
-                    <select value={selectedDemoAccount} onChange={(e) => handleDemoAccountChange(e.target.value)}>
-                      {demoAccounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label>Phone Number</label>
-                    <input type="tel" value={loginPhone} readOnly style={{ backgroundColor: "var(--background)", cursor: "not-allowed" }} />
-                  </div>
+              {!otpSent ? (
+                <button type="button" className="btn btn-primary" style={{ width: "100%" }} onClick={triggerMockOtp}>
+                  Request Verification OTP
+                </button>
+              ) : (
+                <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>
+                  Verify & Open Portal
+                </button>
+              )}
+            </form>
 
-                  {otpSent && (
-                    <div className="form-group">
-                      <label>Verification Code (OTP)</label>
-                      <input type="text" value={otpCode} onChange={(e) => setOtpCode(e.target.value)} maxLength={4} style={{ textAlign: "center", fontSize: "1.25rem", fontWeight: 700 }} />
-                    </div>
-                  )}
-
-                  {!otpSent ? (
-                    <button type="button" className="btn btn-primary" style={{ width: "100%" }} onClick={triggerMockOtp}>
-                      Request OTP Code
-                    </button>
-                  ) : (
-                    <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>
-                      Verify & Access Portal
-                    </button>
-                  )}
-                </form>
+            {loginRole === "doctor" && (
+              <div style={{ marginTop: "1.5rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border)", textAlign: "center" }}>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "0.75rem" }}>New Specialist Enrollment?</p>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ width: "100%", justifyContent: "center" }}
+                  onClick={() => setIsDoctorEnrollOpen(true)}
+                >
+                  <i className="fa-solid fa-user-plus"></i> Submit Credentials
+                </button>
               </div>
             )}
-          </main>
-
-          <footer className="auth-footer">
-            <p>&copy; 2026 MedLink Pro Suite. proof of Concept Sandbox powered by Next.js & Prisma.</p>
-          </footer>
+          </div>
         </div>
+      );
+    }
+
+    // Otherwise, render the premium marketing landing page
+    return (
+      <div id="app-container" style={{ display: "block", background: "radial-gradient(circle at 10% 20%, rgba(14, 165, 233, 0.05) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 40%)" }}>
+        
+        {/* Navbar */}
+        <nav className="landing-navbar">
+          <div className="logo" style={{ fontSize: "1.5rem" }}>
+            <i className="fa-solid fa-house-chimney-medical" style={{ color: "var(--primary)" }}></i>
+            HealOne<span>360</span>
+          </div>
+          <div className="landing-nav-links">
+            <a href="#features" className="landing-nav-link">Features</a>
+            <a href="#compliance" className="landing-nav-link">Trust & Compliance</a>
+            <a href="#tour" className="landing-nav-link">Workflow Tour</a>
+            <a href="#demo-launch" className="btn btn-primary btn-sm" style={{ padding: "0.5rem 1.2rem" }}>
+              Launch Demo
+            </a>
+          </div>
+        </nav>
+
+        {/* Hero Section */}
+        <header className="landing-hero">
+          <div className="landing-hero-badge" style={{ display: "inline-flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center", padding: "0.5rem 1.25rem", borderRadius: "50px", background: "var(--surface)", border: "1px solid var(--border)", marginBottom: "1.5rem" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+              <i className="fa-solid fa-shield-halved" style={{ color: "var(--primary)" }}></i> HIPAA & GDPR Standards Compliant
+            </span>
+            <span style={{ color: "var(--border)", fontSize: "0.8rem" }}>|</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8rem", color: "var(--secondary)", fontWeight: 600 }}>
+              <i className="fa-solid fa-circle-check"></i> Practice Management + EHR + Patient Wallet
+            </span>
+          </div>
+          <h1 style={{ fontWeight: 800, fontSize: "2.75rem", lineHeight: 1.2, maxWidth: "900px", margin: "0 auto" }}>A Unified Healthcare Operating System</h1>
+          <p style={{ maxWidth: "800px", margin: "1.5rem auto 2.5rem auto", fontSize: "1.1rem", lineHeight: 1.6, color: "var(--text-secondary)" }}>
+            What is a Healthcare Operating System? It is a single, fully integrated platform where <strong>Doctors</strong>, <strong>Patients</strong>, <strong>Receptionists</strong>, and <strong>Labs</strong> collaborate in real time. Instead of using separate, disjointed tools, your entire practice runs on one secure EHR engine.
+          </p>
+          <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
+            <a href="#demo-launch" className="btn btn-primary" style={{ padding: "0.75rem 1.5rem", fontSize: "0.95rem" }}>
+              Launch Interactive Demo
+            </a>
+            <a href="#tour" className="btn btn-outline" style={{ padding: "0.75rem 1.5rem", fontSize: "0.95rem" }}>
+              Explore Portal Features
+            </a>
+          </div>
+        </header>
+
+        {/* Interactive Demo Video Section */}
+        <section id="demo-video" style={{ maxWidth: "1000px", margin: "0 auto 4rem auto", padding: "0 1.5rem" }}>
+          <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+            <span style={{ fontSize: "0.8rem", color: "var(--primary)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <i className="fa-solid fa-circle-play" style={{ marginRight: "0.25rem" }}></i> 1-Minute Platform Demo
+            </span>
+            <h2 style={{ fontSize: "2rem", fontWeight: 800, marginTop: "0.5rem" }}>See HealOne 360 in Action</h2>
+            <p style={{ color: "var(--text-secondary)", marginTop: "0.25rem" }}>Watch how effortlessly patients, doctors, receptionists, and labs communicate.</p>
+          </div>
+          <div style={{ 
+            border: "1px solid var(--border)", 
+            borderRadius: "20px", 
+            overflow: "hidden", 
+            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.08)",
+            padding: "0.5rem",
+            background: "linear-gradient(135deg, var(--border) 0%, rgba(255,255,255,0.2) 100%)"
+          }}>
+            <video 
+              src="/Demo.mp4" 
+              controls 
+              style={{ width: "100%", borderRadius: "16px", display: "block", aspectRatio: "16/9", objectFit: "cover" }}
+            />
+          </div>
+        </section>
+
+        {/* How We Are Different Section */}
+        <section id="features" style={{ maxWidth: "1200px", margin: "4rem auto", padding: "0 1.5rem" }}>
+          <style dangerouslySetInnerHTML={{
+            __html: `
+            .diff-card {
+              background: var(--surface);
+              border: 1px solid var(--border);
+              border-radius: 16px;
+              padding: 2rem;
+              box-shadow: var(--shadow-sm);
+              transition: all 0.25s ease;
+            }
+            .diff-card:hover {
+              transform: translateY(-5px);
+              border-color: var(--primary) !important;
+              box-shadow: var(--shadow-md) !important;
+            }
+          `}} />
+          
+          <div style={{ textAlign: "center", marginBottom: "3rem" }}>
+            <span style={{ fontSize: "0.8rem", color: "var(--secondary)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              The HealOne 360 Edge
+            </span>
+            <h2 style={{ fontSize: "2.25rem", fontWeight: 800, marginTop: "0.5rem" }}>How HealOne 360 is Different</h2>
+            <p style={{ color: "var(--text-secondary)", marginTop: "0.5rem", fontSize: "1.05rem" }}>Why modern clinics are shifting from legacy EHR systems to a unified workspace.</p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "2rem" }}>
+            
+            {/* Difference Card 1 */}
+            <div className="diff-card">
+              <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(14, 165, 233, 0.1)", color: "var(--primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", marginBottom: "1.5rem" }}>
+                <i className="fa-solid fa-arrows-spin"></i>
+              </div>
+              <h3 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "0.75rem" }}>Unified Portal Ecosystem</h3>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: 1.5, marginBottom: "1rem" }}>
+                <strong>Legacy systems:</strong> Doctors, Patients, and Labs use separate, disconnected programs that require tedious copy-pasting and manual entry.
+              </p>
+              <div style={{ borderTop: "1px dashed var(--border)", paddingTop: "1rem", color: "var(--secondary)", fontSize: "0.9rem", fontWeight: 600 }}>
+                <i className="fa-solid fa-circle-check" style={{ marginRight: "0.25rem" }}></i> HealOne 360: All portals sync data in real-time under a single secure ledger.
+              </div>
+            </div>
+
+            {/* Difference Card 2 */}
+            <div className="diff-card">
+              <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(16, 185, 129, 0.1)", color: "var(--secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", marginBottom: "1.5rem" }}>
+                <i className="fa-solid fa-brain"></i>
+              </div>
+              <h3 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "0.75rem" }}>Background AI Copilot</h3>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: 1.5, marginBottom: "1rem" }}>
+                <strong>Legacy systems:</strong> Alerts are passive and don't analyze patient state, requiring doctors to check records manually for allergies or vital anomalies.
+              </p>
+              <div style={{ borderTop: "1px dashed var(--border)", paddingTop: "1rem", color: "var(--secondary)", fontSize: "0.9rem", fontWeight: 600 }}>
+                <i className="fa-solid fa-circle-check" style={{ marginRight: "0.25rem" }}></i> HealOne 360: Real-time checks flag allergy contraindications & vitals risk on the fly.
+              </div>
+            </div>
+
+            {/* Difference Card 3 */}
+            <div className="diff-card">
+              <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(245, 158, 11, 0.1)", color: "var(--warning)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", marginBottom: "1.5rem" }}>
+                <i className="fa-solid fa-tooth"></i>
+              </div>
+              <h3 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "0.75rem" }}>Visual Dental Workspace</h3>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: 1.5, marginBottom: "1rem" }}>
+                <strong>Legacy systems:</strong> Dental charting is sold as an expensive add-on or managed via physical paper forms separate from standard EMRs.
+              </p>
+              <div style={{ borderTop: "1px dashed var(--border)", paddingTop: "1rem", color: "var(--secondary)", fontSize: "0.9rem", fontWeight: 600 }}>
+                <i className="fa-solid fa-circle-check" style={{ marginRight: "0.25rem" }}></i> HealOne 360: Interactive 32-tooth odontogram charting and recall scheduler built right in.
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        {/* Competitor Comparison Section */}
+        <section id="comparison" style={{ maxWidth: "1000px", margin: "4.5rem auto", padding: "0 1.5rem" }}>
+          <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
+            <span style={{ fontSize: "0.8rem", color: "var(--primary)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Side-by-Side Comparison
+            </span>
+            <h2 style={{ fontSize: "2rem", fontWeight: 800, marginTop: "0.5rem" }}>Why Choose HealOne 360?</h2>
+            <p style={{ color: "var(--text-secondary)", marginTop: "0.25rem" }}>A direct comparison against legacy medical systems and stand-alone apps.</p>
+          </div>
+
+          <div style={{ 
+            overflowX: "auto", 
+            background: "var(--surface)", 
+            border: "1px solid var(--border)", 
+            borderRadius: "16px", 
+            boxShadow: "var(--shadow-md)" 
+          }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem", minWidth: "600px" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)", background: "rgba(14, 165, 233, 0.04)" }}>
+                  <th style={{ padding: "1.25rem 1.5rem", textAlign: "left", fontWeight: 700, width: "35%" }}>Features & Capabilities</th>
+                  <th style={{ padding: "1.25rem 1.5rem", textAlign: "center", fontWeight: 700, color: "var(--primary)", background: "rgba(14, 165, 233, 0.06)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)", width: "25%" }}>
+                    <i className="fa-solid fa-house-chimney-medical" style={{ marginRight: "0.25rem" }}></i> HealOne 360
+                  </th>
+                  <th style={{ padding: "1.25rem 1.5rem", textAlign: "center", fontWeight: 600, color: "var(--text-secondary)", width: "20%" }}>Traditional EMRs</th>
+                  <th style={{ padding: "1.25rem 1.5rem", textAlign: "center", fontWeight: 600, color: "var(--text-secondary)", width: "20%" }}>Stand-alone Apps</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "1rem 1.5rem", fontWeight: 600 }}>Unified ecosystem (Doctors + Patients + Labs)</td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", background: "rgba(14, 165, 233, 0.02)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--secondary)", fontWeight: 700 }}><i className="fa-solid fa-circle-check"></i> Real-time sync</span>
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Siloed
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Manual export
+                  </td>
+                </tr>
+
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "1rem 1.5rem", fontWeight: 600 }}>Integrated AI Clinical Copilot</td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", background: "rgba(14, 165, 233, 0.02)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--secondary)", fontWeight: 700 }}><i className="fa-solid fa-circle-check"></i> Included free</span>
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> None
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Extra add-on
+                  </td>
+                </tr>
+
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "1rem 1.5rem", fontWeight: 600 }}>Interactive 32-Tooth Odontogram</td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", background: "rgba(14, 165, 233, 0.02)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--secondary)", fontWeight: 700 }}><i className="fa-solid fa-circle-check"></i> Built-in</span>
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Standard only
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Dental only
+                  </td>
+                </tr>
+
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "1rem 1.5rem", fontWeight: 600 }}>Patient-Controlled Health Wallet</td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", background: "rgba(14, 165, 233, 0.02)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--secondary)", fontWeight: 700 }}><i className="fa-solid fa-circle-check"></i> Fully secure</span>
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Read-only portal
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> None
+                  </td>
+                </tr>
+
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "1rem 1.5rem", fontWeight: 600 }}>Setup Costs & Fees</td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", background: "rgba(14, 165, 233, 0.02)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--secondary)", fontWeight: 700 }}><i className="fa-solid fa-circle-check"></i> Zero installation fee</span>
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    High upfront costs
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    Multiple subscriptions
+                  </td>
+                </tr>
+
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "1rem 1.5rem", fontWeight: 600 }}>Offline-Resilient Caching</td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", background: "rgba(14, 165, 233, 0.02)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--secondary)", fontWeight: 700 }}><i className="fa-solid fa-circle-check"></i> Standard offline support</span>
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Online only
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Varies
+                  </td>
+                </tr>
+
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "1rem 1.5rem", fontWeight: 600 }}>Direct Laboratory Syncing</td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", background: "rgba(14, 165, 233, 0.02)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--secondary)", fontWeight: 700 }}><i className="fa-solid fa-circle-check"></i> Direct digital upload</span>
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Manual uploads
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> None
+                  </td>
+                </tr>
+
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "1rem 1.5rem", fontWeight: 600 }}>Crypto-Signed Prescriptions</td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", background: "rgba(14, 165, 233, 0.02)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--secondary)", fontWeight: 700 }}><i className="fa-solid fa-circle-check"></i> SHA-256 verification</span>
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> Plain text/PDF only
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ color: "#94a3b8" }}></i> None
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style={{ padding: "1rem 1.5rem", fontWeight: 600 }}>HIPAA-Level Security & Encryption</td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", background: "rgba(14, 165, 233, 0.02)", borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)" }}>
+                    <span style={{ color: "var(--secondary)", fontWeight: 700 }}><i className="fa-solid fa-circle-check"></i> Standard</span>
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    <i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)" }}></i> Standard
+                  </td>
+                  <td style={{ padding: "1rem 1.5rem", textAlign: "center", color: "var(--text-secondary)" }}>
+                    Varies by app
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* Trust & Compliance Section */}
+        <section id="compliance" className="compliance-grid">
+          <div className="compliance-card">
+            <div className="compliance-icon"><i className="fa-solid fa-shield-halved"></i></div>
+            <h4>AES-256 Data Encryption</h4>
+            <p>Clinical logs, patient profiles, and diagnostics are encrypted in transit and at rest with military-grade algorithms.</p>
+          </div>
+          <div className="compliance-card">
+            <div className="compliance-icon"><i className="fa-solid fa-file-contract"></i></div>
+            <h4>Regulatory Compliance</h4>
+            <p>Designed with data safeguards matching HIPAA administrative, physical, and technical standards.</p>
+          </div>
+          <div className="compliance-card">
+            <div className="compliance-icon"><i className="fa-solid fa-clock-rotate-left"></i></div>
+            <h4>Immutable Audit Ledger</h4>
+            <p>All clinical modifications, diagnostic approvals, and access activities are logged in an immutable system ledger.</p>
+          </div>
+          <div className="compliance-card">
+            <div className="compliance-icon"><i className="fa-solid fa-cloud-arrow-up"></i></div>
+            <h4>Redundant Backups</h4>
+            <p>Hourly automated snapshot systems with geographical replication guarantee clinical backup availability.</p>
+          </div>
+        </section>
+
+        {/* Interactive Feature Walkthrough Tour */}
+        <section id="tour" className="tour-section" style={{ background: "var(--surface)" }}>
+          <div className="tour-container">
+            <div className="tour-header" style={{ marginBottom: "3rem" }}>
+              <h2 style={{ fontSize: "2.25rem", fontWeight: 800 }}>Interactive Clinical Workflows</h2>
+              <p style={{ color: "var(--text-secondary)", marginTop: "0.5rem" }}>Preview the integrated operating portals of HealOne 360.</p>
+            </div>
+            
+            <div className="tour-tabs" style={{ marginBottom: "2rem" }}>
+              <button className={`tour-tab-btn ${activeTourTab === "dashboard" ? "active" : ""}`} onClick={() => setActiveTourTab("dashboard")}>Patient Dashboard</button>
+              <button className={`tour-tab-btn ${activeTourTab === "appointment" ? "active" : ""}`} onClick={() => setActiveTourTab("appointment")}>Appointment Flow</button>
+              <button className={`tour-tab-btn ${activeTourTab === "prescription" ? "active" : ""}`} onClick={() => setActiveTourTab("prescription")}>Prescription Slip</button>
+              <button className={`tour-tab-btn ${activeTourTab === "diagnostics" ? "active" : ""}`} onClick={() => setActiveTourTab("diagnostics")}>Diagnostics Hub</button>
+              <button className={`tour-tab-btn ${activeTourTab === "odontogram" ? "active" : ""}`} onClick={() => setActiveTourTab("odontogram")}>Odontogram Chart</button>
+              <button className={`tour-tab-btn ${activeTourTab === "copilot" ? "active" : ""}`} onClick={() => setActiveTourTab("copilot")}>AI Clinical Copilot</button>
+            </div>
+
+            <div className="tour-viewscreen" style={{ minHeight: "420px" }}>
+              {activeTourTab === "dashboard" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", alignItems: "center", padding: "1rem" }} className="dash-row">
+                  <div>
+                    <h3 style={{ fontSize: "1.5rem", color: "var(--primary)", marginBottom: "1rem" }}><i className="fa-solid fa-gauge"></i> Consolidated Patient Wallet</h3>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", lineHeight: 1.6, marginBottom: "1.25rem" }}>
+                      Patients gain complete agency over their medical records. A central health wallet aggregates active prescriptions, diagnostic files, allergy profiles, family folders, and clinical consultation records in real-time.
+                    </p>
+                    <ul style={{ paddingLeft: "1.25rem", color: "var(--text-secondary)", fontSize: "0.9rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Verify allergy files & chronic conditions in one click</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Share records directly with specialists during referral</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Switch seamlessly between linked family members' profiles</li>
+                    </ul>
+                  </div>
+                  <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1.5rem", boxShadow: "var(--shadow-md)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "1rem", marginBottom: "1rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, var(--primary) 0%, #0369a1 100%)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>AK</div>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: "0.95rem" }}>Amit Kumar (Self)</h4>
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Patient ID: PAT-00102</span>
+                        </div>
+                      </div>
+                      <span className="badge badge-success">Active Wallet</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+                      <div style={{ background: "var(--background)", padding: "0.75rem", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                        <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)", textTransform: "uppercase", fontWeight: 600 }}>Allergies</span>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--danger)", marginTop: "0.25rem" }}>Penicillin, Peanuts</div>
+                      </div>
+                      <div style={{ background: "var(--background)", padding: "0.75rem", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                        <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)", textTransform: "uppercase", fontWeight: 600 }}>Blood Group</span>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--primary)", marginTop: "0.25rem" }}>AB+ Positive</div>
+                      </div>
+                    </div>
+                    <div style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.85rem" }}>
+                      <div>
+                        <span style={{ color: "var(--text-secondary)" }}>Next Consultation:</span>
+                        <div style={{ fontWeight: 650, marginTop: "0.15rem" }}>Dr. Arjun Patel (Cardiology)</div>
+                      </div>
+                      <span className="badge badge-info">Tomorrow, 10:30 AM</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTourTab === "appointment" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", alignItems: "center", padding: "1rem" }} className="dash-row">
+                  <div>
+                    <h3 style={{ fontSize: "1.5rem", color: "var(--primary)", marginBottom: "1rem" }}><i className="fa-regular fa-calendar-check"></i> Unified Practice Calendar</h3>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", lineHeight: 1.6, marginBottom: "1.25rem" }}>
+                      Practice receptionists and doctors schedule appointments, search patient demographic files, manage daily consultations, and block clinical slots directly on a high-availability availabilities calendar.
+                    </p>
+                    <ul style={{ paddingLeft: "1.25rem", color: "var(--text-secondary)", fontSize: "0.9rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Clear slots mapping with visual load states</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Register walk-ins on the fly, auto-linked to physician</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Isolation metrics ensuring calendar load tracking</li>
+                    </ul>
+                  </div>
+                  <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1.5rem", boxShadow: "var(--shadow-md)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                      <h4 style={{ margin: 0, fontSize: "0.95rem" }}><i className="fa-regular fa-clock" style={{ color: "var(--primary)" }}></i> Daily Consultations Grid</h4>
+                      <span className="badge badge-info">June 9, 2026</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <div style={{ borderLeft: "3px solid var(--primary)", background: "rgba(14, 165, 233, 0.06)", padding: "0.5rem 0.75rem", borderRadius: "0 6px 6px 0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem" }}>
+                        <div>
+                          <strong>09:30 AM</strong> - Priya Singh <span style={{ color: "var(--text-secondary)" }}>(Follow-up)</span>
+                        </div>
+                        <span className="badge badge-success" style={{ fontSize: "0.6rem" }}>Completed</span>
+                      </div>
+                      <div style={{ borderLeft: "3px solid var(--danger)", background: "rgba(239, 68, 68, 0.06)", padding: "0.5rem 0.75rem", borderRadius: "0 6px 6px 0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem" }}>
+                        <div>
+                          <strong>10:30 AM</strong> - Amit Kumar <span style={{ color: "var(--text-secondary)" }}>(Emergency)</span>
+                        </div>
+                        <span className="badge badge-danger" style={{ fontSize: "0.6rem" }}>Attending</span>
+                      </div>
+                      <div style={{ borderLeft: "3px solid var(--text-secondary)", background: "#f8fafc", padding: "0.5rem 0.75rem", borderRadius: "0 6px 6px 0", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem" }}>
+                        <div>
+                          <strong>11:30 AM</strong> - Calendar Blocked <span style={{ color: "var(--text-secondary)" }}>(Surgery Block)</span>
+                        </div>
+                        <span className="badge badge-outline" style={{ fontSize: "0.6rem" }}>Blocked</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTourTab === "prescription" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", alignItems: "center", padding: "1rem" }} className="dash-row">
+                  <div>
+                    <h3 style={{ fontSize: "1.5rem", color: "var(--primary)", marginBottom: "1rem" }}><i className="fa-solid fa-file-prescription"></i> Secure Prescription slips</h3>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", lineHeight: 1.6, marginBottom: "1.25rem" }}>
+                      Locked consultation summaries automatically generate structured prescription documents. Slips are verified with cryptographic hash IDs and carry base64-encoded clinical signature marks.
+                    </p>
+                    <ul style={{ paddingLeft: "1.25rem", color: "var(--text-secondary)", fontSize: "0.9rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Itemized dosages, drug frequencies, and directions</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Seamless pharmacy dispatch integration for orders</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Cryptographic signatures verifying medical authority</li>
+                    </ul>
+                  </div>
+                  <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1.5rem", boxShadow: "var(--shadow-md)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--border)", paddingBottom: "0.75rem", marginBottom: "0.75rem" }}>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: "0.95rem", color: "var(--primary)" }}>Dr. Arjun Patel</h4>
+                        <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Cardiologist | MCI-98765</span>
+                      </div>
+                      <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", fontFamily: "serif" }}>R<sub>x</sub></div>
+                    </div>
+                    <div style={{ fontSize: "0.8rem", display: "flex", flexDirection: "column", gap: "0.35rem", marginBottom: "0.75rem" }}>
+                      <div><strong>1. Metformin 500mg</strong> — 1 tab, Once daily (morning) — 30 Days</div>
+                      <div style={{ fontStyle: "italic", color: "var(--text-secondary)", paddingLeft: "0.75rem" }}>Take with meals. Do not crush.</div>
+                      <div style={{ marginTop: "0.25rem" }}><strong>2. Amlodipine 5mg</strong> — 1 tab, Once daily (night) — 15 Days</div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px dashed var(--border)", paddingTop: "0.5rem" }}>
+                      <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>Verify Hash: SHA-20261A</span>
+                      <div style={{ fontStyle: "cursive", color: "var(--primary)", fontWeight: 700, fontSize: "0.85rem" }}>Dr. Arjun Patel</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTourTab === "diagnostics" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", alignItems: "center", padding: "1rem" }} className="dash-row">
+                  <div>
+                    <h3 style={{ fontSize: "1.5rem", color: "var(--primary)", marginBottom: "1rem" }}><i className="fa-solid fa-microscope"></i> Diagnostic Integration & Uploads</h3>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", lineHeight: 1.6, marginBottom: "1.25rem" }}>
+                      Pathology orders travel directly to laboratory portal queues. Technicians record diagnostic findings, attach supporting clinical report PDFs, and update clinical records for doctor view instantly.
+                    </p>
+                    <ul style={{ paddingLeft: "1.25rem", color: "var(--text-secondary)", fontSize: "0.9rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Laboratory queues matching pending specialist orders</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> High-fidelity PDF report uploading and database syncing</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Patient folder visual dashboard linking radiology/scans</li>
+                    </ul>
+                  </div>
+                  <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1.5rem", boxShadow: "var(--shadow-md)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: "0.75rem", marginBottom: "0.75rem" }}>
+                      <h4 style={{ margin: 0, fontSize: "0.95rem" }}><i className="fa-solid fa-flask" style={{ color: "var(--secondary)" }}></i> Pathology Findings Summary</h4>
+                      <span className="badge badge-success">Report Synced</span>
+                    </div>
+                    <div style={{ fontSize: "0.8rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span>Total Cholesterol:</span>
+                        <strong>242 mg/dL <span style={{ color: "var(--danger)" }}>(High)</span></strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span>HDL Cholesterol:</span>
+                        <strong>48 mg/dL <span style={{ color: "var(--text-secondary)" }}>(Normal)</span></strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span>Triglycerides:</span>
+                        <strong>180 mg/dL <span style={{ color: "var(--warning)" }}>(Borderline)</span></strong>
+                      </div>
+                    </div>
+                    <button className="btn btn-outline btn-sm" style={{ width: "100%", justifyContent: "center", marginTop: "1rem", fontSize: "0.75rem" }}>
+                      <i className="fa-solid fa-file-pdf"></i> View Diagnostic Report PDF
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {activeTourTab === "odontogram" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", alignItems: "center", padding: "1rem" }} className="dash-row">
+                  <div>
+                    <h3 style={{ fontSize: "1.5rem", color: "var(--primary)", marginBottom: "1rem" }}><i className="fa-solid fa-tooth"></i> Interactive Odontogram Charting</h3>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", lineHeight: 1.6, marginBottom: "1.25rem" }}>
+                      Dentists utilize the interactive visual odontogram tooth matrix (32 teeth) to log and track dental statuses (decayed, filled, missing, crowns) and build precise treatment plans.
+                    </p>
+                    <ul style={{ paddingLeft: "1.25rem", color: "var(--text-secondary)", fontSize: "0.9rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Visual color-coded status mapping on the 32 teeth matrix</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Treatment Plan Builder tracking dental costs & procedures</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Integrated recall logger tracking patient dental follow-ups</li>
+                    </ul>
+                  </div>
+                  <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1.5rem", boxShadow: "var(--shadow-md)" }}>
+                    <div style={{ textAlign: "center", marginBottom: "0.75rem", fontSize: "0.85rem", fontWeight: 700 }}>Adult Tooth Matrix Chart (Upper Arch)</div>
+                    <div style={{ display: "flex", justifyContent: "center", gap: "0.25rem", marginBottom: "1rem" }}>
+                      {[12, 13, 14, 15, 16].map((num) => {
+                        let status = num === 14 ? "decayed" : (num === 15 ? "filled" : "healthy");
+                        let color = status === "decayed" ? "var(--danger)" : (status === "filled" ? "var(--primary)" : "var(--text-secondary)");
+                        let bg = status === "decayed" ? "var(--danger-light)" : (status === "filled" ? "var(--primary-light)" : "var(--background)");
+                        return (
+                          <div key={num} style={{ background: bg, border: `1.5px solid ${color}`, borderRadius: "6px", width: "42px", padding: "0.3rem", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                            <span style={{ fontSize: "0.65rem", fontWeight: 700 }}>#{num}</span>
+                            <span style={{ fontSize: "0.75rem", color: color, marginTop: "0.15rem" }}>
+                              <i className="fa-solid fa-tooth"></i>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ border: "1px solid var(--border)", padding: "0.75rem", borderRadius: "8px", background: "var(--background)", fontSize: "0.8rem" }}>
+                      <strong>Active Treatment:</strong> Root Canal Treatment (#14) — ₹4,500 <span className="badge badge-warning" style={{ fontSize: "0.6rem", marginLeft: "0.5rem" }}>Planned</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTourTab === "copilot" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", alignItems: "center", padding: "1rem" }} className="dash-row">
+                  <div>
+                    <h3 style={{ fontSize: "1.5rem", color: "var(--primary)", marginBottom: "1rem" }}><i className="fa-solid fa-brain"></i> AI Clinical Copilot & Warnings</h3>
+                    <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem", lineHeight: 1.6, marginBottom: "1.25rem" }}>
+                      An intelligent copilot running in the background dynamically scans SOAP vitals and prescriptions. It instantly warns the doctor of allergy contraindications and anomalies in vital signs.
+                    </p>
+                    <ul style={{ paddingLeft: "1.25rem", color: "var(--text-secondary)", fontSize: "0.9rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Drug allergy lookup checking prescription choices instantly</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Real-time vitals checking evaluating BP, Pulse, SpO2</li>
+                      <li><i className="fa-solid fa-circle-check" style={{ color: "var(--secondary)", marginRight: "0.5rem" }}></i> Automated recommendations supporting clinical workflows</li>
+                    </ul>
+                  </div>
+                  <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1.25rem", boxShadow: "var(--shadow-md)" }}>
+                    <div style={{ borderLeft: "4px solid var(--danger)", background: "var(--danger-light)", padding: "0.75rem", borderRadius: "0 8px 8px 0", color: "#991b1b", fontSize: "0.8rem", marginBottom: "0.75rem" }}>
+                      <div style={{ fontWeight: 700 }}><i className="fa-solid fa-triangle-exclamation"></i> Drug Allergy Interaction Warning</div>
+                      <div style={{ marginTop: "0.25rem" }}>
+                        Patient is allergic to <strong>Penicillin</strong>! Prescribing <strong>Amoxicillin</strong> is contra-indicated. Suggest Clindamycin 300mg.
+                      </div>
+                    </div>
+                    <div style={{ borderLeft: "4px solid var(--warning)", background: "var(--warning-light)", padding: "0.75rem", borderRadius: "0 8px 8px 0", color: "#92400e", fontSize: "0.8rem" }}>
+                      <div style={{ fontWeight: 700 }}><i className="fa-solid fa-heart-pulse"></i> Hypertension Advisory Alert</div>
+                      <div style={{ marginTop: "0.25rem" }}>
+                        Vitals show Blood Pressure is <strong>140/90 mmHg</strong> (Stage 2 Hypertension). Limit Epinephrine local anesthesia dosage.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Demo Launcher role selection cards */}
+        <section id="demo-launch" style={{ maxWidth: "1200px", margin: "4rem auto", padding: "3rem 1.5rem", borderRadius: "var(--radius-lg)" }}>
+          <div style={{ textAlign: "center", marginBottom: "3rem" }}>
+            <h2 style={{ fontSize: "2.25rem", fontWeight: 800 }}>Explore Live Demo Accounts</h2>
+            <p style={{ color: "var(--text-secondary)", marginTop: "0.5rem", fontSize: "1.05rem" }}>Select a mock credential portal below to establish database session verification.</p>
+          </div>
+          
+          <div className="role-grid">
+            <div className="role-card" onClick={() => handleRoleSelection("doctor")}>
+              <div className="role-icon"><i className="fa-solid fa-user-doctor"></i></div>
+              <h3>Doctor Portal</h3>
+              <p>Practice dashboards, SOAP entries, dental odontogram chart, print RX, and patient history.</p>
+            </div>
+            <div className="role-card" onClick={() => handleRoleSelection("patient")}>
+              <div className="role-icon"><i className="fa-solid fa-hospital-user"></i></div>
+              <h3>Patient Portal</h3>
+              <p>Check records wallet, book consultations, diagnostics history, and checkout prescriptions pharmacy.</p>
+            </div>
+            <div className="role-card" onClick={() => handleRoleSelection("lab")}>
+              <div className="role-icon"><i className="fa-solid fa-flask-vial"></i></div>
+              <h3>Lab Portal</h3>
+              <p>Claim test orders, manage queues, and upload digital reports.</p>
+            </div>
+            <div className="role-card" onClick={() => handleRoleSelection("admin")}>
+              <div className="role-icon"><i className="fa-solid fa-user-gear"></i></div>
+              <h3>Admin Panel</h3>
+              <p>Review credentials approvals, verify accounts, and check platform statistics.</p>
+            </div>
+            <div className="role-card" onClick={() => handleRoleSelection("assistant")}>
+              <div className="role-icon"><i className="fa-solid fa-user-tie"></i></div>
+              <h3>Receptionist Portal</h3>
+              <p>Book doctor appointments, register walk-in patients, and block calendar slots.</p>
+            </div>
+          </div>
+        </section>
+
+        <footer className="auth-footer" style={{ paddingBottom: "2rem", borderTop: "1px solid var(--border)", paddingTop: "1.5rem" }}>
+          <p>&copy; 2026 HealOne 360 Operating System. All rights reserved. Enterprise Secure EHR Platform.</p>
+        </footer>
+
+        {/* ==================== DOCTOR ENROLLMENT MODAL ==================== */}
+        {isDoctorEnrollOpen && (
+          <div className="modal-backdrop active" style={{ zIndex: 9999 }}>
+            <div className="modal-container" style={{ maxWidth: 720 }}>
+              <div className="modal-header">
+                <div>
+                  <h3><i className="fa-solid fa-user-doctor" style={{ color: "var(--primary)" }}></i> Doctor Enrolment Application</h3>
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: "0.25rem 0 0 0" }}>Your application will be reviewed by the System Administrator before activation.</p>
+                </div>
+                <button className="modal-close" onClick={() => setIsDoctorEnrollOpen(false)}>&times;</button>
+              </div>
+              <form onSubmit={handleDoctorEnroll}>
+                <div className="modal-body">
+
+                  {/* Personal Info */}
+                  <div style={{ marginBottom: "1rem", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border)" }}>
+                    <h4 style={{ fontSize: "0.85rem", color: "var(--primary)", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      <i className="fa-solid fa-id-card"></i> Personal Information
+                    </h4>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Full Name <span style={{ color: "var(--danger)" }}>*</span></label>
+                        <input type="text" placeholder="Dr. John Smith" value={enrollName} onChange={e => setEnrollName(e.target.value)} required />
+                      </div>
+                      <div className="form-group">
+                        <label>Mobile Phone <span style={{ color: "var(--danger)" }}>*</span></label>
+                        <input type="tel" placeholder="10-digit mobile number" value={enrollPhone} onChange={e => setEnrollPhone(e.target.value)} required maxLength={10} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Credentials */}
+                  <div style={{ marginBottom: "1rem", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border)" }}>
+                    <h4 style={{ fontSize: "0.85rem", color: "var(--secondary)", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      <i className="fa-solid fa-graduation-cap"></i> Doctor Credentials
+                    </h4>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Speciality <span style={{ color: "var(--danger)" }}>*</span></label>
+                        <select value={enrollSpeciality} onChange={e => setEnrollSpeciality(e.target.value)} required>
+                          <option value="">-- Select Speciality --</option>
+                          <option>General Physician</option>
+                          <option>Cardiology</option>
+                          <option>Neurology</option>
+                          <option>Orthopaedics</option>
+                          <option>Gynaecology</option>
+                          <option>Paediatrics</option>
+                          <option>Dermatology</option>
+                          <option>Psychiatry</option>
+                          <option>Dental Surgeon</option>
+                          <option>Ophthalmology</option>
+                          <option>ENT Specialist</option>
+                          <option>Gastroenterology</option>
+                          <option>Endocrinology</option>
+                          <option>Oncology</option>
+                          <option>Pulmonology</option>
+                          <option>Nephrology</option>
+                          <option>Urology</option>
+                          <option>Rheumatology</option>
+                          <option>Other</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Qualifications <span style={{ color: "var(--danger)" }}>*</span></label>
+                        <input type="text" placeholder="e.g. MBBS, MD, DM" value={enrollQual} onChange={e => setEnrollQual(e.target.value)} required />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Doctor Registration No. <span style={{ color: "var(--danger)" }}>*</span></label>
+                        <input type="text" placeholder="e.g. MCI-12345" value={enrollRegNo} onChange={e => setEnrollRegNo(e.target.value)} required />
+                      </div>
+                      <div className="form-group">
+                        <label>Consultation Fee (₹)</label>
+                        <input type="number" placeholder="e.g. 500" value={enrollFee} onChange={e => setEnrollFee(e.target.value)} min="0" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Clinic Details */}
+                  <div style={{ marginBottom: "1rem", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border)" }}>
+                    <h4 style={{ fontSize: "0.85rem", color: "var(--warning)", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      <i className="fa-solid fa-hospital"></i> Clinic / Practice Details
+                    </h4>
+                    <div className="form-group">
+                      <label>Clinic / Hospital Name <span style={{ color: "var(--danger)" }}>*</span></label>
+                      <input type="text" placeholder="e.g. City Heart Care Centre" value={enrollClinicName} onChange={e => setEnrollClinicName(e.target.value)} required />
+                    </div>
+                    <div className="form-group">
+                      <label>Clinic Address</label>
+                      <textarea rows={2} placeholder="Street, City, State, PIN" value={enrollClinicAddress} onChange={e => setEnrollClinicAddress(e.target.value)}></textarea>
+                    </div>
+                  </div>
+
+                  {/* Practice Info */}
+                  <div>
+                    <h4 style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      <i className="fa-solid fa-calendar-check"></i> Practice Info
+                    </h4>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Languages Spoken</label>
+                        <input type="text" placeholder="e.g. English, Hindi, Gujarati" value={enrollLanguages} onChange={e => setEnrollLanguages(e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <label>Available Days (comma-separated)</label>
+                        <input type="text" placeholder="Mon,Tue,Wed,Thu,Fri" value={enrollDays} onChange={e => setEnrollDays(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Professional Bio / About</label>
+                      <textarea rows={2} placeholder="Brief description of your experience and expertise..." value={enrollBio} onChange={e => setEnrollBio(e.target.value)}></textarea>
+                    </div>
+                  </div>
+
+                  {/* Disclaimer */}
+                  <div style={{ background: "var(--background)", border: "1px dashed var(--primary)", borderRadius: 8, padding: "0.75rem 1rem", marginTop: "0.5rem", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                    <i className="fa-solid fa-circle-info" style={{ color: "var(--primary)", marginTop: 2 }}></i>
+                    <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+                      Your application will be placed in <strong>Pending Approval</strong> status. The System Administrator will review your credentials and activate your account. You will receive your Doctor ID upon submission.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-outline" onClick={() => setIsDoctorEnrollOpen(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary"><i className="fa-solid fa-paper-plane"></i> Submit Enrolment Application</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1222,7 +2433,8 @@ export default function MedLinkApp() {
 
     return (
       <div id="app-container" style={{ justifyContent: "center", alignItems: "center", background: "var(--background)", minHeight: "100vh" }}>
-        <style dangerouslySetInnerHTML={{__html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           .profile-select-card:hover {
             transform: translateY(-8px);
           }
@@ -1233,9 +2445,9 @@ export default function MedLinkApp() {
         `}} />
         <div style={{ maxWidth: "800px", width: "100%", padding: "2rem", textAlign: "center" }}>
           <div className="logo" style={{ justifyContent: "center", fontSize: "2rem", marginBottom: "2.5rem" }}>
-            <i className="fa-solid fa-house-chimney-medical" style={{ color: "var(--primary)" }}></i> MedLink<span>Pro</span>
+            <i className="fa-solid fa-house-chimney-medical" style={{ color: "var(--primary)" }}></i> HealOne<span>360</span>
           </div>
-          <h1 style={{ fontSize: "2.25rem", fontWeight: 800, marginBottom: "0.5rem" }}>Who is using MedLink Pro today?</h1>
+          <h1 style={{ fontSize: "2.25rem", fontWeight: 800, marginBottom: "0.5rem" }}>Who is using HealOne 360 today?</h1>
           <p style={{ color: "var(--text-secondary)", marginBottom: "3.5rem", fontSize: "1.05rem" }}>Select a family profile to customize your workspace.</p>
 
           <div style={{ display: "flex", justifyContent: "center", gap: "2.5rem", flexWrap: "wrap" }}>
@@ -1251,7 +2463,7 @@ export default function MedLinkApp() {
               const grad = gradients[idx % gradients.length];
 
               return (
-                <div 
+                <div
                   key={prof.id}
                   onClick={() => {
                     setActivePatientId(prof.id);
@@ -1282,7 +2494,7 @@ export default function MedLinkApp() {
                     boxShadow: "var(--shadow-md)",
                     transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)"
                   }}
-                  className="profile-select-avatar"
+                    className="profile-select-avatar"
                   >
                     {initials}
                   </div>
@@ -1298,7 +2510,7 @@ export default function MedLinkApp() {
           </div>
 
           <div style={{ marginTop: "4.5rem" }}>
-            <button 
+            <button
               className="btn btn-outline"
               onClick={handleLogout}
               style={{ padding: "0.6rem 1.75rem", fontSize: "0.9rem", display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
@@ -1324,10 +2536,51 @@ export default function MedLinkApp() {
   };
 
   const getFilteredPatients = () => {
-    let list = patients;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(p => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.primaryPhone.includes(q));
+    const flatList: any[] = [];
+    patients.forEach(p => {
+      // Primary patient
+      flatList.push({
+        ...p,
+        isFamilyMember: false,
+        primaryPatient: p
+      });
+      // Family members as separate patients
+      p.familyMembers?.forEach(fm => {
+        flatList.push({
+          id: fm.id,
+          name: fm.name,
+          primaryPhone: p.primaryPhone,
+          email: p.email,
+          dateOfBirth: fm.dateOfBirth,
+          gender: fm.gender,
+          bloodGroup: fm.bloodGroup || p.bloodGroup,
+          address: p.address,
+          emergencyContact: p.emergencyContact,
+          allergies: fm.allergies || "No Known Allergies",
+          chronicConditions: fm.chronicConditions || "None Logged",
+          isFamilyMember: true,
+          relation: fm.relation,
+          primaryPatient: p
+        });
+      });
+    });
+
+    let list = flatList;
+    if (currentUser && (currentUser.role === "doctor" || currentUser.role === "assistant")) {
+      const targetDocId = currentUser.role === "doctor" ? currentUser.id : currentUser.doctorId;
+      if (!searchQuery) {
+        list = flatList.filter(p => {
+          return appointments.some(a => a.doctorId === targetDocId && (p.isFamilyMember ? a.familyMemberId === p.id : (!a.familyMemberId && a.patientId === p.id)));
+        });
+      } else {
+        const q = searchQuery.toLowerCase();
+        list = flatList.filter(p => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.primaryPhone.includes(q) || (p.isFamilyMember && p.relation.toLowerCase().includes(q)));
+      }
+    } else {
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        list = flatList.filter(p => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.primaryPhone.includes(q) || (p.isFamilyMember && p.relation.toLowerCase().includes(q)));
+      }
     }
     return list;
   };
@@ -1361,16 +2614,57 @@ export default function MedLinkApp() {
     return null;
   };
 
+  const findPatientOrFamilyMember = (id: string) => {
+    for (const pat of patients) {
+      if (pat.id === id) {
+        return {
+          ...pat,
+          isFamilyMember: false,
+          primaryPatient: pat
+        };
+      }
+      const fm = pat.familyMembers?.find(f => f.id === id);
+      if (fm) {
+        return {
+          id: fm.id,
+          name: fm.name,
+          primaryPhone: pat.primaryPhone,
+          email: pat.email,
+          dateOfBirth: fm.dateOfBirth,
+          gender: fm.gender,
+          bloodGroup: fm.bloodGroup || pat.bloodGroup,
+          address: pat.address,
+          emergencyContact: pat.emergencyContact,
+          allergies: fm.allergies || "No Known Allergies",
+          chronicConditions: fm.chronicConditions || "None Logged",
+          isFamilyMember: true,
+          relation: fm.relation,
+          primaryPatient: pat
+        };
+      }
+    }
+    return null;
+  };
+
   const getSortedPatientAppointments = (patientId: string) => {
-    const patApps = appointments.filter(a => a.patientId === patientId);
-    
+    const patApps = appointments.filter(a => {
+      const isFamily = patientId.startsWith("FM-");
+      const matchesPatient = isFamily ? a.familyMemberId === patientId : (!a.familyMemberId && a.patientId === patientId);
+      
+      if (currentUser && (currentUser.role === "doctor" || currentUser.role === "assistant")) {
+        const targetDocId = currentUser.role === "doctor" ? currentUser.id : currentUser.doctorId;
+        return matchesPatient && a.doctorId === targetDocId;
+      }
+      return matchesPatient;
+    });
+
     // Sort by Date & Time (latest first)
     return [...patApps].sort((a, b) => {
       // Compare dates (YYYY-MM-DD)
       if (a.appointmentDate !== b.appointmentDate) {
         return b.appointmentDate.localeCompare(a.appointmentDate);
       }
-      
+
       // Compare times (e.g. "09:30 AM", "02:00 PM", or "14:30")
       const getMinutes = (timeStr: string) => {
         if (!timeStr) return 0;
@@ -1391,7 +2685,7 @@ export default function MedLinkApp() {
         }
         return 0;
       };
-      
+
       return getMinutes(b.appointmentTime) - getMinutes(a.appointmentTime);
     });
   };
@@ -1410,45 +2704,52 @@ export default function MedLinkApp() {
   return (
     <div id="app-container">
       <div id="dashboard-wrapper">
-        
+
         {/* Sidebar Nav */}
-        <aside id="sidebar">
+        {/* Mobile sidebar overlay */}
+        {isMobileMenuOpen && <div className="sidebar-overlay" onClick={() => setIsMobileMenuOpen(false)} />}
+
+        <aside id="sidebar" className={isMobileMenuOpen ? "mobile-open" : ""}>
           <div>
             <div className="sidebar-brand logo">
-              <i className="fa-solid fa-house-chimney-medical"></i> MedLink<span>Pro</span>
+              <i className="fa-solid fa-house-chimney-medical"></i> HealOne<span>360</span>
+              <button className="sidebar-close-btn" onClick={() => setIsMobileMenuOpen(false)}>
+                <i className="fa-solid fa-xmark"></i>
+              </button>
             </div>
-            
+
             <ul className="sidebar-menu">
               {currentUser.role === "doctor" && (
                 <>
-                  <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => setActivePage("dashboard")}><i className="fa-solid fa-gauge"></i><span>Dashboard</span></a></li>
-                  <li className={`sidebar-item ${activePage === "patients-dir" ? "active" : ""}`}><a onClick={() => setActivePage("patients-dir")}><i className="fa-solid fa-users"></i><span>Patients Directory</span></a></li>
-                  <li className={`sidebar-item ${activePage === "calendar" ? "active" : ""}`}><a onClick={() => setActivePage("calendar")}><i className="fa-solid fa-calendar"></i><span>Availability calendar</span></a></li>
-                  <li className={`sidebar-item ${activePage === "analytics" ? "active" : ""}`}><a onClick={() => setActivePage("analytics")}><i className="fa-solid fa-chart-line"></i><span>Clinical Analytics</span></a></li>
-                  <li className={`sidebar-item ${activePage === "assistants" ? "active" : ""}`}><a onClick={() => setActivePage("assistants")}><i className="fa-solid fa-user-gear"></i><span>Manage Assistants</span></a></li>
+                  <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => handleNavClick("dashboard")}><i className="fa-solid fa-gauge"></i><span>Dashboard</span></a></li>
+                  <li className={`sidebar-item ${activePage === "patients-dir" ? "active" : ""}`}><a onClick={() => handleNavClick("patients-dir")}><i className="fa-solid fa-users"></i><span>Patients Directory</span></a></li>
+                  <li className={`sidebar-item ${activePage === "calendar" ? "active" : ""}`}><a onClick={() => handleNavClick("calendar")}><i className="fa-solid fa-calendar"></i><span>Availability calendar</span></a></li>
+                  <li className={`sidebar-item ${activePage === "analytics" ? "active" : ""}`}><a onClick={() => handleNavClick("analytics")}><i className="fa-solid fa-chart-line"></i><span>Clinical Analytics</span></a></li>
+                  <li className={`sidebar-item ${activePage === "assistants" ? "active" : ""}`}><a onClick={() => handleNavClick("assistants")}><i className="fa-solid fa-user-gear"></i><span>Manage Assistants</span></a></li>
+                  <li className={`sidebar-item ${activePage === "my-clinics" ? "active" : ""}`}><a onClick={() => handleNavClick("my-clinics")}><i className="fa-solid fa-hospital"></i><span>My Clinics</span></a></li>
                 </>
               )}
               {currentUser.role === "assistant" && (
                 <>
-                  <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => setActivePage("dashboard")}><i className="fa-solid fa-gauge"></i><span>Assistant Hub</span></a></li>
-                  <li className={`sidebar-item ${activePage === "calendar" ? "active" : ""}`}><a onClick={() => setActivePage("calendar")}><i className="fa-solid fa-calendar"></i><span>Doctor Calendar</span></a></li>
-                  <li className={`sidebar-item ${activePage === "patients-dir" ? "active" : ""}`}><a onClick={() => setActivePage("patients-dir")}><i className="fa-solid fa-users"></i><span>Patients Directory</span></a></li>
+                  <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => handleNavClick("dashboard")}><i className="fa-solid fa-gauge"></i><span>Assistant Hub</span></a></li>
+                  <li className={`sidebar-item ${activePage === "calendar" ? "active" : ""}`}><a onClick={() => handleNavClick("calendar")}><i className="fa-solid fa-calendar"></i><span>Doctor Calendar</span></a></li>
+                  <li className={`sidebar-item ${activePage === "patients-dir" ? "active" : ""}`}><a onClick={() => handleNavClick("patients-dir")}><i className="fa-solid fa-users"></i><span>Patients Directory</span></a></li>
                 </>
               )}
               {currentUser.role === "patient" && (
                 <>
-                  <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => setActivePage("dashboard")}><i className="fa-solid fa-gauge"></i><span>Dashboard</span></a></li>
-                  <li className={`sidebar-item ${activePage === "find-doctors" ? "active" : ""}`}><a onClick={() => setActivePage("find-doctors")}><i className="fa-solid fa-user-md"></i><span>Find Doctors</span></a></li>
-                  <li className={`sidebar-item ${activePage === "records-wallet" ? "active" : ""}`}><a onClick={() => setActivePage("records-wallet")}><i className="fa-solid fa-folder-open"></i><span>Records Wallet</span></a></li>
-                  <li className={`sidebar-item ${activePage === "pending-labs" ? "active" : ""}`}><a onClick={() => setActivePage("pending-labs")}><i className="fa-solid fa-microscope"></i><span>Pending Lab Orders</span></a></li>
-                  <li className={`sidebar-item ${activePage === "pharmacy" ? "active" : ""}`}><a onClick={() => setActivePage("pharmacy")}><i className="fa-solid fa-pills"></i><span>Order Medicines</span></a></li>
+                  <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => handleNavClick("dashboard")}><i className="fa-solid fa-gauge"></i><span>Dashboard</span></a></li>
+                  <li className={`sidebar-item ${activePage === "find-doctors" ? "active" : ""}`}><a onClick={() => handleNavClick("find-doctors")}><i className="fa-solid fa-user-md"></i><span>Find Doctors</span></a></li>
+                  <li className={`sidebar-item ${activePage === "consultation-history" ? "active" : ""}`}><a onClick={() => handleNavClick("consultation-history")}><i className="fa-solid fa-notes-medical"></i><span>Consultations</span></a></li>
+                  <li className={`sidebar-item ${activePage === "lab-history" ? "active" : ""}`}><a onClick={() => handleNavClick("lab-history")}><i className="fa-solid fa-microscope"></i><span>Lab History</span></a></li>
+                  <li className={`sidebar-item ${activePage === "pharmacy" ? "active" : ""}`}><a onClick={() => handleNavClick("pharmacy")}><i className="fa-solid fa-pills"></i><span>Medicine History</span></a></li>
                 </>
               )}
               {currentUser.role === "lab" && (
-                <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => setActivePage("dashboard")}><i className="fa-solid fa-list-check"></i><span>Orders Queue</span></a></li>
+                <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => handleNavClick("dashboard")}><i className="fa-solid fa-list-check"></i><span>Orders Queue</span></a></li>
               )}
               {currentUser.role === "admin" && (
-                <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => setActivePage("dashboard")}><i className="fa-solid fa-user-check"></i><span>Approvals Panel</span></a></li>
+                <li className={`sidebar-item ${activePage === "dashboard" ? "active" : ""}`}><a onClick={() => handleNavClick("dashboard")}><i className="fa-solid fa-user-check"></i><span>Approvals Panel</span></a></li>
               )}
             </ul>
           </div>
@@ -1461,7 +2762,7 @@ export default function MedLinkApp() {
                 <p>{currentUser.role}</p>
               </div>
             </div>
-            
+
             <button className="btn btn-outline btn-sm" onClick={handleLogout} style={{ width: "100%", justifyContent: "center", gap: "0.5rem", borderColor: "var(--danger-light)", color: "var(--danger)" }}>
               <i className="fa-solid fa-arrow-right-from-bracket"></i> Log Out
             </button>
@@ -1470,25 +2771,30 @@ export default function MedLinkApp() {
 
         {/* Workspace panel wrapper */}
         <main id="main-panel">
-          
+
           {/* Header */}
           <header id="header">
-            <div>
-              <h2 style={{ fontSize: "1.25rem", fontWeight: 700 }}>
-                {activePage === "dashboard" ? (currentUser.role === "assistant" ? "Assistant Hub" : "Dashboard Hub") : activePage === "patients-dir" ? "Clinical Patients Folders" : activePage === "patient-folder" ? "Detailed Patient Summary" : activePage === "calendar" ? "Availability Template" : activePage === "analytics" ? "Practice Business Intel" : activePage === "assistants" ? "Manage Assistants" : activePage === "find-doctors" ? "Schedule consultations" : activePage === "records-wallet" ? "Personal records Wallet" : activePage === "pending-labs" ? "Diagnostic test bookings" : "Pharmacy catalog"}
-              </h2>
-              <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                {currentUser.role.toUpperCase()} PORTAL {currentUser.role === "assistant" && ` (Assisting Dr. ${doctors.find(d => d.id === currentUser.doctorId)?.name || currentUser.doctorId})`} / {activePage.toUpperCase()}
-              </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0 }}>
+              <button className="hamburger-btn" onClick={() => setIsMobileMenuOpen(true)}>
+                <i className="fa-solid fa-bars"></i>
+              </button>
+              <div style={{ minWidth: 0 }}>
+                <h2 className="header-title">
+                  {activePage === "dashboard" ? (currentUser.role === "assistant" ? "Assistant Hub" : "Dashboard Hub") : activePage === "patients-dir" ? "Clinical Patients Folders" : activePage === "patient-folder" ? "Detailed Patient Summary" : activePage === "calendar" ? "Availability Template" : activePage === "analytics" ? "Practice Business Intel" : activePage === "assistants" ? "Manage Assistants" : activePage === "find-doctors" ? "Schedule consultations" : activePage === "lab-history" ? "Lab History Directory" : activePage === "pending-labs" ? "Diagnostic test bookings" : activePage === "pharmacy" ? "Medicine History" : activePage === "consultation-history" ? "Consultation History" : "Dashboard"}
+                </h2>
+                <span className="header-subtitle">
+                  {currentUser.role.toUpperCase()} PORTAL {currentUser.role === "assistant" && ` (Assisting Dr. ${doctors.find(d => d.id === currentUser.doctorId)?.name || currentUser.doctorId})`} / {activePage.toUpperCase()}
+                </span>
+              </div>
             </div>
 
             <div className="header-actions">
-               {(activePage === "patients-dir" || activePage === "find-doctors" || activePage === "pharmacy") && (
-                 <div className="header-search">
-                   <i className="fa-solid fa-magnifying-glass"></i>
-                   <input type="text" placeholder="Search entries..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                 </div>
-               )}
+              {(activePage === "patients-dir" || activePage === "find-doctors" || activePage === "pharmacy") && (
+                <div className="header-search">
+                  <i className="fa-solid fa-magnifying-glass"></i>
+                  <input type="text" placeholder="Search entries..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                </div>
+              )}
 
               {/* Patient Active Profile switcher */}
               {currentUser.role === "patient" && (
@@ -1504,9 +2810,75 @@ export default function MedLinkApp() {
                 </div>
               )}
 
-              <button className="icon-btn" onClick={() => alert("Notification center is preloaded inside sandbox logs.")}>
-                <i className="fa-regular fa-bell"></i>
-              </button>
+              {/* Notification Bell & Dropdown */}
+              <div className="notif-wrapper">
+                <button className="icon-btn" onClick={() => setIsNotifOpen(prev => !prev)}>
+                  <i className={isNotifOpen ? "fa-solid fa-bell" : "fa-regular fa-bell"}></i>
+                  {(() => {
+                    const roleNotifs = notifications.filter(n => n.forRoles.includes(currentUser.role));
+                    const unreadCount = roleNotifs.filter(n => !n.read).length;
+                    return unreadCount > 0 ? <span className="notif-count">{unreadCount}</span> : null;
+                  })()}
+                </button>
+
+                {isNotifOpen && (
+                  <>
+                    <div className="notif-overlay" onClick={() => setIsNotifOpen(false)} />
+                    <div className="notif-dropdown">
+                      <div className="notif-dropdown-header">
+                        <h4>
+                          <i className="fa-solid fa-bell" style={{ color: "var(--primary)" }}></i>
+                          Notifications
+                          <span className="notif-header-count">
+                            {notifications.filter(n => n.forRoles.includes(currentUser.role)).length}
+                          </span>
+                        </h4>
+                        <button
+                          className="notif-mark-read"
+                          onClick={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+                        >
+                          Mark all read
+                        </button>
+                      </div>
+                      <div className="notif-list">
+                        {(() => {
+                          const roleNotifs = notifications.filter(n => n.forRoles.includes(currentUser.role));
+                          if (roleNotifs.length === 0) {
+                            return (
+                              <div className="notif-empty">
+                                <i className="fa-regular fa-bell-slash"></i>
+                                <p>No notifications yet.</p>
+                              </div>
+                            );
+                          }
+                          return roleNotifs.map(notif => (
+                            <div
+                              key={notif.id}
+                              className={`notif-item ${!notif.read ? "unread" : ""}`}
+                              onClick={() => setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n))}
+                            >
+                              <div className={`notif-icon ${notif.type}`}>
+                                <i className={
+                                  notif.type === "consultation" ? "fa-solid fa-stethoscope" :
+                                    notif.type === "medicine" ? "fa-solid fa-pills" :
+                                      notif.type === "reminder" ? "fa-solid fa-clock" :
+                                        notif.type === "alert" ? "fa-solid fa-triangle-exclamation" :
+                                          "fa-solid fa-circle-info"
+                                }></i>
+                              </div>
+                              <div className="notif-body">
+                                <h5>{notif.title}</h5>
+                                <p>{notif.message}</p>
+                              </div>
+                              <span className="notif-time">{notif.time}</span>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </header>
 
@@ -1533,14 +2905,7 @@ export default function MedLinkApp() {
                         <p>Total seen Patients</p>
                       </div>
                     </div>
-                    <div className="stat-card">
-                      <div className="stat-icon warning"><i className="fa-solid fa-clipboard-list"></i></div>
-                      <div className="stat-info">
-                        <h3>{labReports.length}</h3>
-                        <p>Uploaded Lab Files</p>
-                      </div>
-                    </div>
-                    </div>
+                  </div>
 
                   <div className="dash-row">
                     <div className="panel">
@@ -1550,9 +2915,9 @@ export default function MedLinkApp() {
                           <i className="fa-solid fa-plus"></i> New Appointment
                         </button>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1.25rem", padding: "1.25rem 0" }}>
+                      <div className="appointments-grid">
                         {appointments.filter(a => a.doctorId === targetDocId).length === 0 ? (
-                          <p style={{ textAlign: "center", color: "var(--text-secondary)", padding: "2rem 0", gridColumn: "span 3" }}>
+                          <p style={{ textAlign: "center", color: "var(--text-secondary)", padding: "2rem 0" }}>
                             No scheduled consults.
                           </p>
                         ) : (
@@ -1581,24 +2946,37 @@ export default function MedLinkApp() {
 
                             const statusBadgeClass = isBlocked
                               ? "badge-danger"
-                              : (app.status === "completed" 
-                                ? "badge-success" 
+                              : (app.status === "completed"
+                                ? "badge-success"
                                 : (app.status === "scheduled" ? "badge-info" : "badge-danger"));
 
+                            // Dynamic left border and background color based on status and visitType (using slightly darker/richer transparent layers)
+                            let cardBorderLeft = "3px solid var(--primary)";
+                            let cardBackground = "linear-gradient(90deg, rgba(14, 165, 233, 0.12) 0%, var(--glass) 100%)";
+
+                            if (isBlocked) {
+                              cardBorderLeft = "3px solid var(--text-secondary)";
+                              cardBackground = "linear-gradient(90deg, rgba(100, 116, 139, 0.12) 0%, var(--glass) 100%)";
+                            } else if (app.status === "completed") {
+                              cardBorderLeft = "3px solid var(--secondary)";
+                              cardBackground = "linear-gradient(90deg, rgba(16, 185, 129, 0.12) 0%, var(--glass) 100%)";
+                            } else if (app.visitType === "emergency") {
+                              cardBorderLeft = "3px solid var(--danger)";
+                              cardBackground = "linear-gradient(90deg, rgba(239, 68, 68, 0.12) 0%, var(--glass) 100%)";
+                            } else if (app.visitType === "follow-up") {
+                              cardBorderLeft = "3px solid var(--warning)";
+                              cardBackground = "linear-gradient(90deg, rgba(245, 158, 11, 0.12) 0%, var(--glass) 100%)";
+                            }
+
                             return (
-                              <div 
-                                key={app.id} 
-                                className="glass-card" 
-                                style={{ 
-                                  cursor: isBlocked ? "default" : "pointer", 
-                                  borderTop: isBlocked ? "4px solid var(--text-secondary)" : "4px solid var(--primary)",
-                                  padding: "1.25rem",
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  justifyContent: "space-between",
-                                  height: "100%",
+                              <div
+                                key={app.id}
+                                className="appointment-card glass-card"
+                                style={{
+                                  cursor: isBlocked ? "default" : "pointer",
+                                  borderLeft: cardBorderLeft,
                                   opacity: isBlocked ? 0.75 : 1,
-                                  background: isBlocked ? "var(--background)" : "var(--glass)"
+                                  background: cardBackground
                                 }}
                                 onClick={() => {
                                   if (isBlocked) return;
@@ -1606,96 +2984,90 @@ export default function MedLinkApp() {
                                   setActivePage("patient-folder");
                                 }}
                               >
-                                <div>
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-                                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 600 }}>
-                                      {app.appointmentTime} - {formatDate(app.appointmentDate)}
-                                    </div>
-                                    <span className={`badge ${statusBadgeClass}`} style={{ fontSize: "0.7rem", textTransform: "uppercase" }}>
-                                      {app.status}
+                                <div style={{ display: "flex", alignItems: "center", gap: "1rem", flex: 1, minWidth: 0 }}>
+                                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--primary)", minWidth: "75px" }}>
+                                    {app.appointmentTime}
+                                  </span>
+                                  <div style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                                    <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                      {pName}
+                                    </h4>
+                                    <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                                      {pMeta ? `(${pMeta})` : ""}
                                     </span>
-                                  </div>
-
-                                  <div style={{ marginBottom: "0.75rem" }}>
-                                    <h4 style={{ margin: 0, color: isBlocked ? "var(--text-secondary)" : "var(--primary)", fontSize: "1.1rem" }}>{pName}</h4>
-                                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>{pMeta}</div>
-                                  </div>
-
-                                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
-                                    <span className={`badge ${badgeClass}`} style={{ fontSize: "0.7rem" }}>
-                                      {isBlocked ? "block" : app.visitType}
-                                    </span>
-                                    <span className="badge badge-outline" style={{ fontSize: "0.7rem", color: "var(--text-secondary)", borderColor: "var(--border)" }}>
-                                      ID: {app.id}
-                                    </span>
-                                  </div>
-
-                                  <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", backgroundColor: "var(--background)", padding: "0.5rem 0.75rem", borderRadius: "6px", border: "1px solid var(--border)", marginBottom: "1.25rem", minHeight: "45px", display: "flex", alignItems: "center" }}>
-                                    <div><strong>{isBlocked ? "Reason:" : "Complaint:"}</strong> {app.chiefComplaint}</div>
                                   </div>
                                 </div>
 
-                                <div style={{ display: "flex", gap: "0.5rem", marginTop: "auto", width: "100%" }} onClick={(e) => e.stopPropagation()}>
-                                  {isBlocked && (
-                                    <button 
-                                      className="btn btn-outline btn-sm" 
-                                      style={{ flex: 1, justifyContent: "center", color: "var(--danger)", borderColor: "var(--danger)" }}
-                                      onClick={async () => {
-                                        if (!confirm("Are you sure you want to unblock this slot?")) return;
-                                        try {
-                                          const res = await fetch("/api/appointments", {
-                                            method: "PATCH",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ appointmentId: app.id, status: "cancelled" })
-                                          });
-                                          if (res.ok) {
-                                            alert("Slot unblocked successfully!");
-                                            loadData();
-                                          } else {
+                                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
+                                  <span className={`badge ${badgeClass}`} style={{ fontSize: "0.65rem" }}>
+                                    {isBlocked ? "block" : app.visitType}
+                                  </span>
+                                  <span className={`badge ${statusBadgeClass}`} style={{ fontSize: "0.65rem", textTransform: "uppercase" }}>
+                                    {app.status}
+                                  </span>
+
+                                  <div style={{ display: "flex", gap: "0.25rem" }}>
+                                    {isBlocked && (
+                                      <button
+                                        className="btn btn-outline btn-sm"
+                                        style={{ padding: "0.2rem 0.4rem", fontSize: "0.65rem", color: "var(--danger)", borderColor: "var(--danger)" }}
+                                        onClick={async () => {
+                                          if (!confirm("Are you sure you want to unblock this slot?")) return;
+                                          try {
+                                            const res = await fetch("/api/appointments", {
+                                              method: "PATCH",
+                                              headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({ appointmentId: app.id, status: "cancelled" })
+                                            });
+                                            if (res.ok) {
+                                              alert("Slot unblocked successfully!");
+                                              loadData();
+                                            } else {
+                                              alert("Failed to unblock slot.");
+                                            }
+                                          } catch (err) {
                                             alert("Failed to unblock slot.");
                                           }
-                                        } catch (err) {
-                                          alert("Failed to unblock slot.");
-                                        }
-                                      }}
-                                    >
-                                      <i className="fa-solid fa-unlock"></i> Unblock Slot
-                                    </button>
-                                  )}
-                                  {!isBlocked && app.status === "scheduled" && currentUser.role === "doctor" && (
-                                    <button 
-                                      className="btn btn-secondary btn-sm" 
-                                      style={{ flex: 1, justifyContent: "center" }}
-                                      onClick={() => startConsultationSoap(app.id)}
-                                    >
-                                      <i className="fa-solid fa-stethoscope"></i> Start SOAP
-                                    </button>
-                                  )}
-                                  {!isBlocked && app.status === "completed" && (
-                                    <button 
-                                      className="btn btn-outline btn-sm" 
-                                      style={{ flex: 1, justifyContent: "center" }}
-                                      onClick={() => loadPrescriptionPrint(generateId('RX'))}
-                                    >
-                                      <i className="fa-solid fa-print"></i> Prescription
-                                    </button>
-                                  )}
-                                  {(() => {
-                                    const appReports = labReports.filter(r => r.appointmentId === app.id);
-                                    if (appReports.length > 0 && !isBlocked) {
-                                      return (
-                                        <button 
-                                          type="button"
-                                          className="btn btn-outline btn-sm" 
-                                          style={{ flex: 1, justifyContent: "center" }} 
-                                          onClick={() => openViewReportsModal(app.id)}
-                                        >
-                                          <i className="fa-solid fa-file-waveform"></i> Reports ({appReports.length})
-                                        </button>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
+                                        }}
+                                      >
+                                        Unblock
+                                      </button>
+                                    )}
+                                    {!isBlocked && app.status === "scheduled" && currentUser.role === "doctor" && (
+                                      <button
+                                        className="btn btn-secondary btn-sm"
+                                        style={{ padding: "0.2rem 0.4rem", fontSize: "0.65rem" }}
+                                        onClick={() => startConsultationSoap(app.id)}
+                                      >
+                                        Start SOAP
+                                      </button>
+                                    )}
+                                    {!isBlocked && app.status === "completed" && (
+                                      <button
+                                        className="btn btn-outline btn-sm"
+                                        style={{ padding: "0.2rem 0.4rem", fontSize: "0.65rem" }}
+                                        onClick={() => loadPrescriptionPrint(generateId('RX'))}
+                                      >
+                                        RX
+                                      </button>
+                                    )}
+                                    {(() => {
+                                      const appReports = labReports.filter(r => r.appointmentId === app.id);
+                                      if (appReports.length > 0 && !isBlocked) {
+                                        return (
+                                          <button
+                                            type="button"
+                                            className="btn btn-outline btn-sm"
+                                            style={{ padding: "0.2rem 0.4rem", fontSize: "0.65rem" }}
+                                            onClick={() => openViewReportsModal(app.id)}
+                                          >
+                                            Reports ({appReports.length})
+                                          </button>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -1704,158 +3076,159 @@ export default function MedLinkApp() {
                       </div>
                     </div>
 
-                  <div>
-                    <div className="panel" style={{ background: "linear-gradient(135deg, var(--primary) 0%, #0369a1 100%)", color: "var(--surface)" }}>
-                      <h3 style={{ color: "var(--surface)", marginBottom: "0.5rem", fontSize: "1.1rem" }}><i className="fa-solid fa-bolt"></i> Quick Assistant</h3>
-                      <p style={{ fontSize: "0.85rem", opacity: 0.9, marginBottom: "1.25rem" }}>Register new patient records directly into the clinical system.</p>
-                      <button className="btn btn-secondary" style={{ width: "100%", justifyContent: "center" }} onClick={() => setIsAddPatientOpen(true)}>
-                        <i className="fa-solid fa-user-plus"></i> Register Patient
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Referrals Tracker Section */}
-                <div className="panel" style={{ marginTop: "1.5rem" }}>
-                  <div className="panel-header" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "0.75rem", marginBottom: "1rem" }}>
-                    <h3 className="panel-title">
-                      <i className="fa-solid fa-share-nodes" style={{ color: "var(--primary)" }}></i> Specialist Referrals Tracker
-                    </h3>
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button 
-                        type="button"
-                        className={`btn ${referralTab === "incoming" ? "btn-primary" : "btn-outline"} btn-sm`} 
-                        onClick={() => setReferralTab("incoming")}
-                      >
-                        Incoming Referrals ({receivedReferrals.filter(r => r.status === "sent" || r.status === "accepted").length})
-                      </button>
-                      <button 
-                        type="button"
-                        className={`btn ${referralTab === "outgoing" ? "btn-primary" : "btn-outline"} btn-sm`} 
-                        onClick={() => setReferralTab("outgoing")}
-                      >
-                        Outgoing Referrals ({sentReferrals.length})
-                      </button>
+                    <div>
+                      <div className="panel" style={{ background: "linear-gradient(135deg, var(--primary) 0%, #0369a1 100%)", color: "var(--surface)" }}>
+                        <h3 style={{ color: "var(--surface)", marginBottom: "0.5rem", fontSize: "1.1rem" }}><i className="fa-solid fa-bolt"></i> Quick Assistant</h3>
+                        <p style={{ fontSize: "0.85rem", opacity: 0.9, marginBottom: "1.25rem" }}>Register new patient records directly into the clinical system.</p>
+                        <button className="btn btn-secondary" style={{ width: "100%", justifyContent: "center" }} onClick={() => setIsAddPatientOpen(true)}>
+                          <i className="fa-solid fa-user-plus"></i> Register Patient
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  {referralTab === "incoming" ? (
-                    <div className="table-wrapper">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Referral Date</th>
-                            <th>Patient Name</th>
-                            <th>Referring Doctor</th>
-                            <th>Reason / Urgency</th>
-                            <th>Additional Notes</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {receivedReferrals.length === 0 ? (
-                            <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--text-secondary)" }}>No incoming referrals found.</td></tr>
-                          ) : (
-                            receivedReferrals.map(ref => (
-                              <tr key={ref.id}>
-                                <td>{formatDate(ref.createdAt)}</td>
-                                <td>
-                                  <div style={{ fontWeight: 600, color: "var(--primary)", cursor: "pointer" }} onClick={() => { setSelectedPatDetailId(ref.patientId); setActivePage("patient-folder"); }}>
-                                    {ref.patientName}
-                                  </div>
-                                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>ID: {ref.patientId}</div>
-                                </td>
-                                <td>
-                                  <div style={{ fontWeight: 600 }}>{ref.referringDoctorName}</div>
-                                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{ref.referringDoctorSpeciality}</div>
-                                </td>
-                                <td>
-                                  <div>{ref.reason}</div>
-                                  <span className={`badge ${ref.urgency === "emergency" ? "badge-danger" : (ref.urgency === "urgent" ? "badge-warning" : "badge-info")}`}>
-                                    {ref.urgency}
-                                  </span>
-                                </td>
-                                <td style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{ref.notes || "No extra notes"}</td>
-                                <td>
-                                  <span className={`badge ${ref.status === "completed" ? "badge-success" : (ref.status === "accepted" ? "badge-info" : (ref.status === "rejected" ? "badge-danger" : "badge-warning"))}`}>
-                                    {ref.status}
-                                  </span>
-                                </td>
-                                <td>
-                                  {ref.status === "sent" && (
-                                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleUpdateReferralStatus(ref.id, "accepted")}>
-                                        Accept
-                                      </button>
-                                      <button type="button" className="btn btn-outline btn-danger btn-sm" onClick={() => handleUpdateReferralStatus(ref.id, "rejected")}>
-                                        Reject
-                                      </button>
+                  {/* Referrals Tracker Section */}
+                  <div className="panel" style={{ marginTop: "1.5rem" }}>
+                    <div className="panel-header" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "0.75rem", marginBottom: "1rem" }}>
+                      <h3 className="panel-title">
+                        <i className="fa-solid fa-share-nodes" style={{ color: "var(--primary)" }}></i> Specialist Referrals Tracker
+                      </h3>
+                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          className={`btn ${referralTab === "incoming" ? "btn-primary" : "btn-outline"} btn-sm`}
+                          onClick={() => setReferralTab("incoming")}
+                        >
+                          Incoming Referrals ({receivedReferrals.filter(r => r.status === "sent" || r.status === "accepted").length})
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${referralTab === "outgoing" ? "btn-primary" : "btn-outline"} btn-sm`}
+                          onClick={() => setReferralTab("outgoing")}
+                        >
+                          Outgoing Referrals ({sentReferrals.length})
+                        </button>
+                      </div>
+                    </div>
+
+                    {referralTab === "incoming" ? (
+                      <div className="table-wrapper">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Referral Date</th>
+                              <th>Patient Name</th>
+                              <th>Referring Doctor</th>
+                              <th>Reason / Urgency</th>
+                              <th>Additional Notes</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {receivedReferrals.length === 0 ? (
+                              <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--text-secondary)" }}>No incoming referrals found.</td></tr>
+                            ) : (
+                              receivedReferrals.map(ref => (
+                                <tr key={ref.id}>
+                                  <td>{formatDate(ref.createdAt)}</td>
+                                  <td>
+                                    <div style={{ fontWeight: 600, color: "var(--primary)", cursor: "pointer" }} onClick={() => { setSelectedPatDetailId(ref.patientId); setActivePage("patient-folder"); }}>
+                                      {ref.patientName}
                                     </div>
-                                  )}
-                                  {ref.status === "accepted" && (
-                                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleLogReferralConsultClick(ref)}>
-                                      <i className="fa-solid fa-stethoscope"></i> Log Consult
-                                    </button>
-                                  )}
-                                  {ref.status === "rejected" && <span style={{ fontSize: "0.8rem", color: "var(--danger)" }}>Rejected</span>}
-                                  {ref.status === "completed" && <span style={{ fontSize: "0.8rem", color: "var(--success)" }}>Completed</span>}
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="table-wrapper">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Referral Date</th>
-                            <th>Patient Name</th>
-                            <th>Referred Specialist</th>
-                            <th>Reason / Urgency</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sentReferrals.length === 0 ? (
-                            <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--text-secondary)" }}>No outgoing referrals found.</td></tr>
-                          ) : (
-                            sentReferrals.map(ref => (
-                              <tr key={ref.id}>
-                                <td>{formatDate(ref.createdAt)}</td>
-                                <td>
-                                  <div style={{ fontWeight: 600, color: "var(--primary)" }}>{ref.patientName}</div>
-                                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>ID: {ref.patientId}</div>
-                                </td>
-                                <td>
-                                  <div style={{ fontWeight: 600 }}>{ref.referredToDoctorName}</div>
-                                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{ref.referredToDoctorSpeciality}</div>
-                                </td>
-                                <td>
-                                  <div>{ref.reason}</div>
-                                  <span className={`badge ${ref.urgency === "emergency" ? "badge-danger" : (ref.urgency === "urgent" ? "badge-warning" : "badge-info")}`}>
-                                    {ref.urgency}
-                                  </span>
-                                </td>
-                                <td>
-                                  <span className={`badge ${ref.status === "completed" ? "badge-success" : (ref.status === "accepted" ? "badge-info" : (ref.status === "rejected" ? "badge-danger" : "badge-warning"))}`}>
-                                    {ref.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </section>
-            );
-          })()}
+                                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>ID: {ref.patientId}</div>
+                                  </td>
+                                  <td>
+                                    <div style={{ fontWeight: 600 }}>{ref.referringDoctorName}</div>
+                                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{ref.referringDoctorSpeciality}</div>
+                                  </td>
+                                  <td>
+                                    <div>{ref.reason}</div>
+                                    <span className={`badge ${ref.urgency === "emergency" ? "badge-danger" : (ref.urgency === "urgent" ? "badge-warning" : "badge-info")}`}>
+                                      {ref.urgency}
+                                    </span>
+                                  </td>
+                                  <td style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{ref.notes || "No extra notes"}</td>
+                                  <td>
+                                    <span className={`badge ${ref.status === "completed" ? "badge-success" : (ref.status === "accepted" ? "badge-info" : (ref.status === "rejected" ? "badge-danger" : "badge-warning"))}`}>
+                                      {ref.status}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    {ref.status === "sent" && (
+                                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleUpdateReferralStatus(ref.id, "accepted")}>
+                                          Accept
+                                        </button>
+                                        <button type="button" className="btn btn-outline btn-danger btn-sm" onClick={() => handleUpdateReferralStatus(ref.id, "rejected")}>
+                                          Reject
+                                        </button>
+                                      </div>
+                                    )}
+                                    {ref.status === "accepted" && (
+                                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleLogReferralConsultClick(ref)}>
+                                        <i className="fa-solid fa-stethoscope"></i> Log Consult
+                                      </button>
+                                    )}
+                                    {ref.status === "rejected" && <span style={{ fontSize: "0.8rem", color: "var(--danger)" }}>Rejected</span>}
+                                    {ref.status === "completed" && <span style={{ fontSize: "0.8rem", color: "var(--success)" }}>Completed</span>}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="table-wrapper">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Referral Date</th>
+                              <th>Patient Name</th>
+                              <th>Referred Specialist</th>
+                              <th>Reason / Urgency</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sentReferrals.length === 0 ? (
+                              <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--text-secondary)" }}>No outgoing referrals found.</td></tr>
+                            ) : (
+                              sentReferrals.map(ref => (
+                                <tr key={ref.id}>
+                                  <td>{formatDate(ref.createdAt)}</td>
+                                  <td>
+                                    <div style={{ fontWeight: 600, color: "var(--primary)" }}>{ref.patientName}</div>
+                                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>ID: {ref.patientId}</div>
+                                  </td>
+                                  <td>
+                                    <div style={{ fontWeight: 600 }}>{ref.referredToDoctorName}</div>
+                                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{ref.referredToDoctorSpeciality}</div>
+                                  </td>
+                                  <td>
+                                    <div>{ref.reason}</div>
+                                    <span className={`badge ${ref.urgency === "emergency" ? "badge-danger" : (ref.urgency === "urgent" ? "badge-warning" : "badge-info")}`}>
+                                      {ref.urgency}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <span className={`badge ${ref.status === "completed" ? "badge-success" : (ref.status === "accepted" ? "badge-info" : (ref.status === "rejected" ? "badge-danger" : "badge-warning"))}`}>
+                                      {ref.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                </section>
+              );
+            })()}
 
             {((currentUser.role === "doctor" || currentUser.role === "assistant") && activePage === "patients-dir") && (
               <section className="page-section">
@@ -1873,22 +3246,26 @@ export default function MedLinkApp() {
                     {getFilteredPatients().length === 0 ? (
                       <div style={{ textAlign: "center", color: "var(--text-secondary)", padding: "3rem" }}>
                         <i className="fa-solid fa-user-slash" style={{ fontSize: "2rem", marginBottom: "1rem", opacity: 0.5 }}></i>
-                        <p>No patients match the search query.</p>
+                        <p>
+                          {!searchQuery 
+                            ? "No attending patients in directory yet. Use the search bar at the top to find existing profiles by ID/Phone, or register a new patient."
+                            : "No patients match the search query."}
+                        </p>
                       </div>
                     ) : (
                       getFilteredPatients().map(pat => {
                         const patApps = getSortedPatientAppointments(pat.id);
                         const isDetailsExpanded = !!expandedDetailsPatientIds[pat.id];
                         const isApptsExpanded = !!expandedAppointmentsPatientIds[pat.id];
-                        const initials = pat.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+                        const initials = (pat.name as string).split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
 
                         return (
-                          <div 
-                            key={pat.id} 
-                            className="glass-card" 
-                            style={{ 
-                              border: "1px solid var(--border)", 
-                              borderRadius: "12px", 
+                          <div
+                            key={pat.id}
+                            className="glass-card"
+                            style={{
+                              border: "1px solid var(--border)",
+                              borderRadius: "12px",
                               overflow: "hidden",
                               transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                               boxShadow: isApptsExpanded || isDetailsExpanded ? "var(--shadow-md)" : "var(--shadow-sm)",
@@ -1896,12 +3273,12 @@ export default function MedLinkApp() {
                             }}
                           >
                             {/* Card Header Panel */}
-                            <div 
-                              style={{ 
-                                display: "flex", 
-                                alignItems: "center", 
-                                justifyContent: "space-between", 
-                                padding: "1.25rem", 
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "1.25rem",
                                 cursor: "pointer",
                                 userSelect: "none"
                               }}
@@ -1909,7 +3286,7 @@ export default function MedLinkApp() {
                             >
                               <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
                                 {/* Profile Avatar: clicking toggles details */}
-                                <div 
+                                <div
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setExpandedDetailsPatientIds(prev => ({ ...prev, [pat.id]: !prev[pat.id] }));
@@ -1955,11 +3332,11 @@ export default function MedLinkApp() {
 
                                 {/* Patient Core Info */}
                                 <div>
-                                  <h4 
-                                    style={{ 
-                                      margin: 0, 
-                                      fontSize: "1.15rem", 
-                                      color: "var(--text-primary)", 
+                                  <h4
+                                    style={{
+                                      margin: 0,
+                                      fontSize: "1.15rem",
+                                      color: "var(--text-primary)",
                                       fontWeight: 700,
                                       display: "inline-flex",
                                       alignItems: "center",
@@ -1967,6 +3344,11 @@ export default function MedLinkApp() {
                                     }}
                                   >
                                     {pat.name}
+                                    {pat.isFamilyMember && (
+                                      <span style={{ fontSize: "0.7rem", color: "var(--primary)", backgroundColor: "var(--primary-light)", padding: "2px 6px", borderRadius: "4px", border: "1px solid var(--border)" }}>
+                                        {pat.relation} of {pat.primaryPatient.name}
+                                      </span>
+                                    )}
                                     <span style={{ fontSize: "0.75rem", fontWeight: 400, color: "var(--text-secondary)", backgroundColor: "var(--background)", padding: "2px 8px", borderRadius: "4px" }}>
                                       {pat.id}
                                     </span>
@@ -1984,23 +3366,28 @@ export default function MedLinkApp() {
                                 <span className={`badge ${patApps.length > 0 ? 'badge-info' : 'badge-outline'}`} style={{ fontSize: "0.75rem" }}>
                                   {patApps.length} {patApps.length === 1 ? 'Appointment' : 'Appointments'}
                                 </span>
-                                
+
                                 {currentUser.role === "doctor" ? (
-                                  <button 
-                                    className="btn btn-secondary btn-sm" 
-                                    onClick={() => handleLogConsultClick(pat.id)}
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => handleLogConsultClick(pat.isFamilyMember ? pat.primaryPatient.id : pat.id, pat.isFamilyMember ? pat.id : null)}
                                     style={{ height: "34px", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
                                   >
                                     <i className="fa-solid fa-stethoscope"></i> Log Consult
                                   </button>
                                 ) : (
-                                  <button 
-                                    className="btn btn-secondary btn-sm" 
+                                  <button
+                                    className="btn btn-secondary btn-sm"
                                     onClick={() => {
-                                      setBookingPatientId(pat.id);
+                                      setBookingPatientId(pat.isFamilyMember ? pat.primaryPatient.id : pat.id);
+                                      setBookingFamilyMemberId(pat.isFamilyMember ? pat.id : "");
                                       setBookingDoctorId(currentUser.doctorId || "");
                                       setBookingDate(new Date().toISOString().split("T")[0]);
                                       setBookingIsBlock(false);
+                                      setBookingTime("");
+                                      setBookingComplaint("");
+                                      setBookingSearchVal("");
+                                      setBookingSearchDone(false);
                                       loadBookingSlots();
                                       setIsBookAppOpen(true);
                                     }}
@@ -2010,18 +3397,18 @@ export default function MedLinkApp() {
                                   </button>
                                 )}
 
-                                <button 
-                                  className="btn btn-outline btn-sm" 
+                                <button
+                                  className="btn btn-outline btn-sm"
                                   onClick={() => { setSelectedPatDetailId(pat.id); setActivePage("patient-folder"); }}
                                   style={{ height: "34px", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
                                 >
                                   <i className="fa-solid fa-folder-open"></i> Full File
                                 </button>
 
-                                <div 
+                                <div
                                   onClick={() => setExpandedAppointmentsPatientIds(prev => ({ ...prev, [pat.id]: !prev[pat.id] }))}
-                                  style={{ 
-                                    padding: "0.25rem", 
+                                  style={{
+                                    padding: "0.25rem",
                                     cursor: "pointer",
                                     color: "var(--text-secondary)",
                                     transition: "transform 0.25s ease",
@@ -2035,10 +3422,10 @@ export default function MedLinkApp() {
 
                             {/* Demographics Drawer Section */}
                             {isDetailsExpanded && (
-                              <div 
-                                style={{ 
-                                  padding: "1.25rem", 
-                                  backgroundColor: "var(--background)", 
+                              <div
+                                style={{
+                                  padding: "1.25rem",
+                                  backgroundColor: "var(--background)",
                                   borderTop: "1px solid var(--border)",
                                   display: "grid",
                                   gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -2071,10 +3458,10 @@ export default function MedLinkApp() {
 
                             {/* Appointments Timeline Drawer Section */}
                             {isApptsExpanded && (
-                              <div 
-                                style={{ 
-                                  padding: "1.25rem", 
-                                  borderTop: "1px solid var(--border)", 
+                              <div
+                                style={{
+                                  padding: "1.25rem",
+                                  borderTop: "1px solid var(--border)",
                                   backgroundColor: "#fcfdfe",
                                   animation: "fadeIn 0.25s ease"
                                 }}
@@ -2095,19 +3482,19 @@ export default function MedLinkApp() {
                                       if (app.visitType === "emergency") visitBadge = "badge-danger";
                                       else if (app.visitType === "follow-up") visitBadge = "badge-success";
 
-                                      const statusBadge = app.status === "completed" 
-                                        ? "badge-success" 
+                                      const statusBadge = app.status === "completed"
+                                        ? "badge-success"
                                         : (app.status === "scheduled" ? "badge-info" : "badge-danger");
 
                                       const appReports = labReports.filter(r => r.appointmentId === app.id);
 
                                       return (
-                                        <div 
-                                          key={app.id} 
-                                          style={{ 
-                                            background: "var(--surface)", 
-                                            border: "1px solid var(--border)", 
-                                            borderRadius: "8px", 
+                                        <div
+                                          key={app.id}
+                                          style={{
+                                            background: "var(--surface)",
+                                            border: "1px solid var(--border)",
+                                            borderRadius: "8px",
                                             padding: "1rem",
                                             boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
                                             display: "flex",
@@ -2146,8 +3533,8 @@ export default function MedLinkApp() {
                                           {/* Appt level quick actions */}
                                           <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
                                             {app.status === "scheduled" && currentUser.role === "doctor" && (
-                                              <button 
-                                                className="btn btn-secondary btn-sm" 
+                                              <button
+                                                className="btn btn-secondary btn-sm"
                                                 onClick={() => startConsultationSoap(app.id)}
                                                 style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
                                               >
@@ -2155,8 +3542,8 @@ export default function MedLinkApp() {
                                               </button>
                                             )}
                                             {app.status === "completed" && (
-                                              <button 
-                                                className="btn btn-outline btn-sm" 
+                                              <button
+                                                className="btn btn-outline btn-sm"
                                                 onClick={() => loadPrescriptionPrint("", app.id)}
                                                 style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
                                               >
@@ -2164,8 +3551,8 @@ export default function MedLinkApp() {
                                               </button>
                                             )}
                                             {appReports.length > 0 && (
-                                              <button 
-                                                className="btn btn-outline btn-sm" 
+                                              <button
+                                                className="btn btn-outline btn-sm"
                                                 onClick={() => openViewReportsModal(app.id)}
                                                 style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
                                               >
@@ -2209,19 +3596,19 @@ export default function MedLinkApp() {
                       <div className="panel" style={{ transition: "all 0.3s ease" }}>
                         <div className="panel-header"><h3 className="panel-title"><i className="fa-solid fa-id-card"></i> Demographics Summary</h3></div>
                         <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-                          <div 
+                          <div
                             onClick={() => setExpandedDetailsPatientIds(prev => ({ ...prev, [pat.id]: !prev[pat.id] }))}
-                            style={{ 
-                              width: 70, 
-                              height: 70, 
-                              borderRadius: "50%", 
-                              background: expandedDetailsPatientIds[pat.id] ? "linear-gradient(135deg, var(--primary) 0%, #0369a1 100%)" : "var(--primary-light)", 
-                              color: expandedDetailsPatientIds[pat.id] ? "var(--surface)" : "var(--primary)", 
-                              fontSize: "1.75rem", 
-                              display: "inline-flex", 
-                              alignItems: "center", 
-                              justifyContent: "center", 
-                              fontWeight: 700, 
+                            style={{
+                              width: 70,
+                              height: 70,
+                              borderRadius: "50%",
+                              background: expandedDetailsPatientIds[pat.id] ? "linear-gradient(135deg, var(--primary) 0%, #0369a1 100%)" : "var(--primary-light)",
+                              color: expandedDetailsPatientIds[pat.id] ? "var(--surface)" : "var(--primary)",
+                              fontSize: "1.75rem",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontWeight: 700,
                               marginBottom: "0.5rem",
                               cursor: "pointer",
                               border: "2px solid var(--border)",
@@ -2271,158 +3658,575 @@ export default function MedLinkApp() {
                           </div>
                         )}
                       </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", flex: 1 }}>
+                        <div style={{ display: "flex", gap: "0.5rem", borderBottom: "1px solid var(--border)", paddingBottom: "0.75rem" }}>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${activeFolderTab === "medical" ? "btn-primary" : "btn-outline"}`}
+                            onClick={() => setActiveFolderTab("medical")}
+                          >
+                            <i className="fa-solid fa-clock-rotate-left"></i> Medical Portfolio
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${activeFolderTab === "dental" ? "btn-primary" : "btn-outline"}`}
+                            onClick={() => {
+                              setActiveFolderTab("dental");
+                              setSelectedTooth(null);
+                            }}
+                          >
+                            <i className="fa-solid fa-tooth"></i> Dental Workspace
+                          </button>
+                        </div>
 
-                      <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-                        <div 
-                          className="panel-header" 
-                          style={{ 
-                            display: "flex", 
-                            justifyContent: "space-between", 
-                            alignItems: "center", 
-                            marginBottom: "1rem"
-                          }}
-                        >
-                          <h3 className="panel-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                            <i className="fa-solid fa-clock-rotate-left" style={{ color: "var(--primary)" }}></i> Clinical Appointments Portfolio
-                            <span className="badge badge-outline" style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginLeft: "0.5rem" }}>
-                              {getSortedPatientAppointments(pat.id).length} Appts
-                            </span>
-                          </h3>
-                          {currentUser.role === "doctor" ? (
-                            <button className="btn btn-secondary btn-sm" onClick={() => handleLogConsultClick(pat.id)}>
-                              <i className="fa-solid fa-stethoscope"></i> Log Consult
-                            </button>
-                          ) : (
-                            <button 
-                              className="btn btn-secondary btn-sm" 
-                              onClick={() => {
-                                setBookingPatientId(pat.id);
-                                setBookingDoctorId(currentUser.doctorId || "");
-                                setBookingDate(new Date().toISOString().split("T")[0]);
-                                setBookingIsBlock(false);
-                                loadBookingSlots();
-                                setIsBookAppOpen(true);
+                        {activeFolderTab === "medical" ? (
+                          <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1.25rem", marginTop: 0 }}>
+                            <div
+                              className="panel-header"
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "1rem"
                               }}
                             >
-                              <i className="fa-regular fa-calendar-check"></i> Book Slot
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="patient-appointments-list" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                          {getSortedPatientAppointments(pat.id).length === 0 ? (
-                            <div style={{ padding: "2rem", textAlign: "center", color: "var(--text-secondary)", border: "1px dashed var(--border)", borderRadius: "8px" }}>
-                              <i className="fa-regular fa-calendar-times" style={{ fontSize: "1.8rem", marginBottom: "0.5rem", opacity: 0.5 }}></i>
-                              <p>No historical appointments found in this file.</p>
-                            </div>
-                          ) : (
-                            getSortedPatientAppointments(pat.id).map(app => {
-                              let visitBadge = "badge-info";
-                              if (app.visitType === "emergency") visitBadge = "badge-danger";
-                              else if (app.visitType === "follow-up") visitBadge = "badge-success";
-
-                              const statusBadge = app.status === "completed" 
-                                ? "badge-success" 
-                                : (app.status === "scheduled" ? "badge-info" : "badge-danger");
-
-                              const appReports = labReports.filter(r => r.appointmentId === app.id);
-
-                              return (
-                                <div 
-                                  key={app.id} 
-                                  style={{ 
-                                    background: "var(--surface)", 
-                                    border: "1px solid var(--border)", 
-                                    borderRadius: "10px", 
-                                    padding: "1.25rem",
-                                    boxShadow: "var(--shadow-sm)",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: "0.85rem"
+                              <h3 className="panel-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                <i className="fa-solid fa-clock-rotate-left" style={{ color: "var(--primary)" }}></i> Clinical Appointments Portfolio
+                                <span className="badge badge-outline" style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginLeft: "0.5rem" }}>
+                                  {getSortedPatientAppointments(pat.id).length} Appts
+                                </span>
+                              </h3>
+                              {currentUser.role === "doctor" ? (
+                                <button className="btn btn-secondary btn-sm" onClick={() => handleLogConsultClick(pat.id)}>
+                                  <i className="fa-solid fa-stethoscope"></i> Log Consult
+                                </button>
+                              ) : (
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => {
+                                    setBookingPatientId(pat.id);
+                                    setBookingDoctorId(currentUser.doctorId || "");
+                                    setBookingDate(new Date().toISOString().split("T")[0]);
+                                    setBookingIsBlock(false);
+                                    setBookingSearchVal("");
+                                    setBookingSearchDone(false);
+                                    loadBookingSlots();
+                                    setIsBookAppOpen(true);
                                   }}
-                                  className="appointment-full-card"
                                 >
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                                      <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--primary)" }}>
-                                        {formatDate(app.appointmentDate)} at {app.appointmentTime}
-                                      </span>
-                                      <span className={`badge ${visitBadge}`} style={{ fontSize: "0.7rem", padding: "1px 6px" }}>
-                                        {app.visitType}
-                                      </span>
-                                    </div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                                      <span className={`badge ${statusBadge}`} style={{ fontSize: "0.7rem", padding: "1px 6px" }}>
-                                        {app.status}
-                                      </span>
-                                      <code style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>{app.id}</code>
-                                    </div>
-                                  </div>
+                                  <i className="fa-regular fa-calendar-check"></i> Book Slot
+                                </button>
+                              )}
+                            </div>
 
-                                  <div style={{ fontSize: "0.875rem", color: "var(--text-primary)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                                    <div><strong>Chief Complaint:</strong> {app.chiefComplaint || "No complaint logged."}</div>
-                                    {app.notes && (
-                                      <div style={{ fontSize: "0.825rem", color: "var(--text-secondary)", backgroundColor: "var(--background)", padding: "0.5rem 0.75rem", borderRadius: "6px", border: "1px solid var(--border)", marginTop: "0.25rem" }}>
-                                        <strong>Attending Doctor Notes:</strong> {app.notes}
+                            <div className="patient-appointments-list" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                              {getSortedPatientAppointments(pat.id).length === 0 ? (
+                                <div style={{ padding: "2rem", textAlign: "center", color: "var(--text-secondary)", border: "1px dashed var(--border)", borderRadius: "8px" }}>
+                                  <i className="fa-regular fa-calendar-times" style={{ fontSize: "1.8rem", marginBottom: "0.5rem", opacity: 0.5 }}></i>
+                                  <p>No historical appointments found in this file.</p>
+                                </div>
+                              ) : (
+                                getSortedPatientAppointments(pat.id).map(app => {
+                                  let visitBadge = "badge-info";
+                                  if (app.visitType === "emergency") visitBadge = "badge-danger";
+                                  else if (app.visitType === "follow-up") visitBadge = "badge-success";
+
+                                  const statusBadge = app.status === "completed"
+                                    ? "badge-success"
+                                    : (app.status === "scheduled" ? "badge-info" : "badge-danger");
+
+                                  const appReports = labReports.filter(r => r.appointmentId === app.id);
+
+                                  return (
+                                    <div
+                                      key={app.id}
+                                      style={{
+                                        background: "var(--surface)",
+                                        border: "1px solid var(--border)",
+                                        borderRadius: "10px",
+                                        padding: "1.25rem",
+                                        boxShadow: "var(--shadow-sm)",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "0.85rem"
+                                      }}
+                                      className="appointment-full-card"
+                                    >
+                                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                                          <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--primary)" }}>
+                                            {formatDate(app.appointmentDate)} at {app.appointmentTime}
+                                          </span>
+                                          <span className={`badge ${visitBadge}`} style={{ fontSize: "0.7rem", padding: "1px 6px" }}>
+                                            {app.visitType}
+                                          </span>
+                                        </div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                          <span className={`badge ${statusBadge}`} style={{ fontSize: "0.7rem", padding: "1px 6px" }}>
+                                            {app.status}
+                                          </span>
+                                          <code style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>{app.id}</code>
+                                        </div>
                                       </div>
-                                    )}
-                                  </div>
 
-                                  {/* Lab Reports inline for this appointment if any exist */}
-                                  {appReports.length > 0 && (
-                                    <div style={{ marginTop: "0.5rem", borderTop: "1px dashed var(--border)", paddingTop: "0.5rem" }}>
-                                      <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase" }}>Linked Diagnostic Reports</span>
-                                      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.25rem" }}>
-                                        {appReports.map(rep => (
-                                          <div key={rep.id} style={{ padding: "0.75rem", background: "var(--background)", borderRadius: "6px", border: "1px solid var(--border)" }}>
-                                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", fontWeight: 600, marginBottom: "0.25rem" }}>
-                                              <span>{rep.reportTitle}</span>
-                                              <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>{formatDate(rep.uploadedAt)}</span>
-                                            </div>
-                                            <pre style={{ fontFamily: "monospace", fontSize: "0.75rem", padding: "0.35rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 4, whiteSpace: "pre-wrap", margin: 0 }}>
-                                              {rep.findings}
-                                            </pre>
+                                      <div style={{ fontSize: "0.875rem", color: "var(--text-primary)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                                        <div><strong>Chief Complaint:</strong> {app.chiefComplaint || "No complaint logged."}</div>
+                                        {app.notes && (
+                                          <div style={{ fontSize: "0.825rem", color: "var(--text-secondary)", backgroundColor: "var(--background)", padding: "0.5rem 0.75rem", borderRadius: "6px", border: "1px solid var(--border)", marginTop: "0.25rem" }}>
+                                            <strong>Attending Doctor Notes:</strong> {app.notes}
                                           </div>
-                                        ))}
+                                        )}
+                                      </div>
+
+                                      {appReports.length > 0 && (
+                                        <div style={{ marginTop: "0.5rem", borderTop: "1px dashed var(--border)", paddingTop: "0.5rem" }}>
+                                          <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase" }}>Linked Diagnostic Reports</span>
+                                          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.25rem" }}>
+                                            {appReports.map(rep => (
+                                              <div key={rep.id} style={{ padding: "0.75rem", background: "var(--background)", borderRadius: "6px", border: "1px solid var(--border)" }}>
+                                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", fontWeight: 600, marginBottom: "0.25rem" }}>
+                                                  <span>{rep.reportTitle}</span>
+                                                  <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>{formatDate(rep.uploadedAt)}</span>
+                                                </div>
+                                                {rep.findings && (
+                                                  <pre style={{ fontFamily: "monospace", fontSize: "0.75rem", padding: "0.35rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 4, whiteSpace: "pre-wrap", margin: "0 0 0.5rem 0" }}>
+                                                    {rep.findings}
+                                                  </pre>
+                                                )}
+                                                <div style={{ display: "flex", gap: "0.5rem" }}>
+                                                  <button
+                                                    type="button"
+                                                    className="btn btn-outline btn-sm"
+                                                    onClick={() => {
+                                                      setViewPdfReport(rep);
+                                                      setIsPdfModalOpen(true);
+                                                    }}
+                                                  >
+                                                    <i className="fa-solid fa-file-pdf"></i> View Report PDF
+                                                  </button>
+                                                  {rep.fileUrl && (
+                                                    <a
+                                                      href={rep.fileUrl}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      download={rep.fileName || "report.pdf"}
+                                                      className="btn btn-secondary btn-sm"
+                                                    >
+                                                      <i className="fa-solid fa-download"></i> Download Attached PDF
+                                                    </a>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>
+                                        {app.status === "scheduled" && currentUser.role === "doctor" && (
+                                          <button
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => startConsultationSoap(app.id)}
+                                            style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+                                          >
+                                            <i className="fa-solid fa-stethoscope"></i> Start SOAP
+                                          </button>
+                                        )}
+                                        {app.status === "completed" && (
+                                          <button
+                                            className="btn btn-outline btn-sm"
+                                            onClick={() => loadPrescriptionPrint("", app.id)}
+                                            style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+                                          >
+                                            <i className="fa-solid fa-print"></i> Prescription Slip
+                                          </button>
+                                        )}
+                                        {appReports.length > 0 && (
+                                          <button
+                                            className="btn btn-outline btn-sm"
+                                            onClick={() => openViewReportsModal(app.id)}
+                                            style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+                                          >
+                                            <i className="fa-solid fa-file-waveform"></i> View PDF/Files ({appReports.length})
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
-                                  )}
-
-                                  {/* Appt level quick actions */}
-                                  <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>
-                                    {app.status === "scheduled" && currentUser.role === "doctor" && (
-                                      <button 
-                                        className="btn btn-secondary btn-sm" 
-                                        onClick={() => startConsultationSoap(app.id)}
-                                        style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
-                                      >
-                                        <i className="fa-solid fa-stethoscope"></i> Start SOAP
-                                      </button>
-                                    )}
-                                    {app.status === "completed" && (
-                                      <button 
-                                        className="btn btn-outline btn-sm" 
-                                        onClick={() => loadPrescriptionPrint("", app.id)}
-                                        style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
-                                      >
-                                        <i className="fa-solid fa-print"></i> Prescription Slip
-                                      </button>
-                                    )}
-                                    {appReports.length > 0 && (
-                                      <button 
-                                        className="btn btn-outline btn-sm" 
-                                        onClick={() => openViewReportsModal(app.id)}
-                                        style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
-                                      >
-                                        <i className="fa-solid fa-file-waveform"></i> View PDF/Files ({appReports.length})
-                                      </button>
-                                    )}
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                            {/* DENTAL ARCHES */}
+                            <div className="panel" style={{ padding: "1.25rem", border: "1px solid var(--border)", marginTop: 0 }}>
+                              <h3 className="panel-title" style={{ marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                <i className="fa-solid fa-teeth" style={{ color: "var(--primary)" }}></i> Interactive Odontogram
+                              </h3>
+                              <div className="odontogram-panel">
+                                <div className="odontogram-arch">
+                                  <div className="odontogram-arch-title">
+                                    <i className="fa-solid fa-chevron-up"></i> Maxillary Arch (Upper - Teeth 1-16)
+                                  </div>
+                                  <div className="odontogram-teeth-row">
+                                    {Array.from({ length: 16 }, (_, i) => i + 1).map(num => {
+                                      const statusClass = getToothStatusClass(num, pat.id);
+                                      const statusChar = getToothStatusChar(num, pat.id);
+                                      const isSelected = selectedTooth === num;
+                                      return (
+                                        <div
+                                          key={num}
+                                          className={`tooth-card ${isSelected ? "selected" : ""}`}
+                                          onClick={() => handleToothClick(num, pat.id)}
+                                        >
+                                          <span className="tooth-num">{num}</span>
+                                          <div className={`tooth-icon-holder ${statusClass}`}>
+                                            {statusChar === "H" ? (
+                                              <i className="fa-solid fa-tooth" style={{ fontSize: "0.65rem", opacity: 0.5 }}></i>
+                                            ) : statusChar}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
-                              );
-                            })
-                          )}
-                        </div>
+
+                                <div className="odontogram-arch">
+                                  <div className="odontogram-arch-title">
+                                    <i className="fa-solid fa-chevron-down"></i> Mandibular Arch (Lower - Teeth 17-32)
+                                  </div>
+                                  <div className="odontogram-teeth-row">
+                                    {Array.from({ length: 16 }, (_, i) => i + 17).map(num => {
+                                      const statusClass = getToothStatusClass(num, pat.id);
+                                      const statusChar = getToothStatusChar(num, pat.id);
+                                      const isSelected = selectedTooth === num;
+                                      return (
+                                        <div
+                                          key={num}
+                                          className={`tooth-card ${isSelected ? "selected" : ""}`}
+                                          onClick={() => handleToothClick(num, pat.id)}
+                                        >
+                                          <span className="tooth-num">{num}</span>
+                                          <div className={`tooth-icon-holder ${statusClass}`}>
+                                            {statusChar === "H" ? (
+                                              <i className="fa-solid fa-tooth" style={{ fontSize: "0.65rem", opacity: 0.5 }}></i>
+                                            ) : statusChar}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                <div className="odontogram-legend">
+                                  <div className="legend-item"><span className="legend-dot"></span> Healthy</div>
+                                  <div className="legend-item"><span className="legend-dot decayed"></span> Decayed</div>
+                                  <div className="legend-item"><span className="legend-dot filled"></span> Filled</div>
+                                  <div className="legend-item"><span className="legend-dot crown"></span> Crown</div>
+                                  <div className="legend-item"><span className="legend-dot missing"></span> Missing</div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* TOOTH NOTES & STATUS EDITOR */}
+                            {selectedTooth !== null && (
+                              <div className="panel animate-fade-in" style={{ border: "1px solid var(--primary)", background: "var(--primary-light)", padding: "1.25rem", marginTop: 0 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                                  <h4 style={{ margin: 0, fontSize: "0.95rem", color: "var(--primary)", fontWeight: 700 }}>
+                                    <i className="fa-solid fa-pen-to-square"></i> Tooth #{selectedTooth} Editor
+                                  </h4>
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline btn-sm"
+                                    style={{ padding: "2px 6px" }}
+                                    onClick={() => setSelectedTooth(null)}
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+
+                                <div style={{ marginBottom: "1rem" }}>
+                                  <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "0.35rem" }}>Clinical Status</label>
+                                  <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                                    {[
+                                      { name: "Healthy", value: "healthy" },
+                                      { name: "Decayed", value: "decayed" },
+                                      { name: "Filled", value: "filled" },
+                                      { name: "Crown", value: "crown" },
+                                      { name: "Missing", value: "missing" }
+                                    ].map(opt => {
+                                      const patientOdontogram = odontogramData[pat.id] || {};
+                                      const isCurrent = (patientOdontogram[selectedTooth] || "healthy") === opt.value;
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={opt.value}
+                                          className={`btn btn-sm ${isCurrent ? "btn-primary" : "btn-outline"}`}
+                                          style={{ fontSize: "0.75rem" }}
+                                          onClick={() => handleUpdateToothStatus(opt.value, pat.id)}
+                                        >
+                                          {opt.name}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                <div className="form-group" style={{ marginBottom: "0.75rem" }}>
+                                  <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Clinical Notes for Tooth #{selectedTooth}</label>
+                                  <textarea
+                                    rows={2}
+                                    placeholder="Enter notes (e.g. distal caries, RCT planned...)"
+                                    value={toothNoteInput}
+                                    onChange={(e) => setToothNoteInput(e.target.value)}
+                                    style={{ padding: "0.5rem", fontSize: "0.8rem" }}
+                                  ></textarea>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => handleSaveToothNote(pat.id)}
+                                >
+                                  <i className="fa-solid fa-save"></i> Save Tooth Note
+                                </button>
+                              </div>
+                            )}
+
+                            {/* TREATMENT PLAN BUILDER */}
+                            <div className="panel" style={{ padding: "1.25rem", border: "1px solid var(--border)", marginTop: 0 }}>
+                              <h4 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                <i className="fa-solid fa-screwdriver-wrench" style={{ color: "var(--secondary)" }}></i> Treatment Plan Builder
+                              </h4>
+
+                              <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem", alignItems: "flex-end" }}>
+                                <div style={{ flex: "1 1 200px" }}>
+                                  <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "0.25rem" }}>Select Procedure</label>
+                                  <select
+                                    value={treatmentProcedureInput}
+                                    onChange={(e) => setTreatmentProcedureInput(e.target.value)}
+                                    style={{ fontSize: "0.85rem", padding: "0.5rem" }}
+                                  >
+                                    {DENTAL_PROCEDURES.map(proc => (
+                                      <option key={proc.name} value={proc.name}>
+                                        {proc.name} (₹{proc.cost.toLocaleString()})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div style={{ flex: "1 1 120px" }}>
+                                  <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "0.25rem" }}>Tooth Ref</label>
+                                  <select
+                                    value={selectedTooth || ""}
+                                    onChange={(e) => setSelectedTooth(e.target.value ? Number(e.target.value) : null)}
+                                    style={{ fontSize: "0.85rem", padding: "0.5rem" }}
+                                  >
+                                    <option value="">General</option>
+                                    {Array.from({ length: 32 }, (_, i) => i + 1).map(num => (
+                                      <option key={num} value={num}>Tooth #{num}</option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div style={{ flex: "2 1 250px" }}>
+                                  <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "0.25rem" }}>Clinical Notes</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Enter notes..."
+                                    value={treatmentNotesInput}
+                                    onChange={(e) => setTreatmentNotesInput(e.target.value)}
+                                    style={{ fontSize: "0.85rem", padding: "0.5rem", height: "36px" }}
+                                  />
+                                </div>
+
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ height: "36px", paddingInline: "1rem" }}
+                                  onClick={() => handleAddTreatmentPlan(pat.id)}
+                                >
+                                  <i className="fa-solid fa-plus"></i> Add Plan
+                                </button>
+                              </div>
+
+                              <div className="table-wrapper" style={{ maxHeight: "200px", overflowY: "auto" }}>
+                                <table style={{ fontSize: "0.8rem" }}>
+                                  <thead>
+                                    <tr>
+                                      <th>Date</th>
+                                      <th>Tooth</th>
+                                      <th>Procedure</th>
+                                      <th>Notes</th>
+                                      <th>Est. Cost</th>
+                                      <th>Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(() => {
+                                      const patientPlans = treatmentPlans[pat.id] || [];
+                                      const totalCost = patientPlans.reduce((sum, p) => sum + p.cost, 0);
+                                      return (
+                                        <>
+                                          {patientPlans.map(item => (
+                                            <tr key={item.id}>
+                                              <td>{formatDate(item.date)}</td>
+                                              <td style={{ fontWeight: 600 }}>{item.tooth}</td>
+                                              <td style={{ fontWeight: 600 }}>{item.procedure}</td>
+                                              <td style={{ color: "var(--text-secondary)" }}>{item.notes}</td>
+                                              <td style={{ fontWeight: 700 }}>₹{item.cost.toLocaleString()}</td>
+                                              <td>
+                                                <button
+                                                  type="button"
+                                                  className="btn btn-danger btn-sm"
+                                                  style={{ padding: "2px 6px" }}
+                                                  onClick={() => handleDeleteTreatmentPlan(item.id, pat.id)}
+                                                >
+                                                  &times;
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                          {patientPlans.length === 0 && (
+                                            <tr>
+                                              <td colSpan={6} style={{ textAlign: "center", color: "var(--text-secondary)" }}>
+                                                No treatment plans built yet.
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              {(() => {
+                                const patientPlans = treatmentPlans[pat.id] || [];
+                                const totalCost = patientPlans.reduce((sum, p) => sum + p.cost, 0);
+                                return patientPlans.length > 0 ? (
+                                  <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.75rem", marginTop: "0.75rem", display: "flex", justifyContent: "flex-end" }}>
+                                    <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                                      Total Estimated Cost: <span style={{ color: "var(--secondary)", fontSize: "1.1rem" }}>₹{totalCost.toLocaleString()}</span>
+                                    </span>
+                                  </div>
+                                ) : null;
+                              })()}
+                            </div>
+
+                            {/* RECALL SCHEDULER */}
+                            <div className="panel" style={{ padding: "1.25rem", border: "1px solid var(--border)", marginTop: 0 }}>
+                              <h4 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                <i className="fa-solid fa-calendar-check" style={{ color: "var(--primary)" }}></i> Dental Recalls & Follow-ups
+                              </h4>
+
+                              <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem", alignItems: "flex-end" }}>
+                                <div style={{ flex: "1 1 200px" }}>
+                                  <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "0.25rem" }}>Recall Type</label>
+                                  <select
+                                    value={recallTypeInput}
+                                    onChange={(e) => setRecallTypeInput(e.target.value)}
+                                    style={{ fontSize: "0.85rem", padding: "0.5rem" }}
+                                  >
+                                    <option value="Routine Scaling & Exam">Routine Scaling & Exam</option>
+                                    <option value="6-Month Prophylaxis">6-Month Prophylaxis</option>
+                                    <option value="Orthodontic Follow-up">Orthodontic Follow-up</option>
+                                    <option value="Implant Restoration Check">Implant Restoration Check</option>
+                                    <option value="Deep Scaling Maintenance">Deep Scaling Maintenance</option>
+                                  </select>
+                                </div>
+
+                                <div style={{ flex: "1 1 150px" }}>
+                                  <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "0.25rem" }}>Recall Due Date</label>
+                                  <input
+                                    type="date"
+                                    value={recallDateInput}
+                                    onChange={(e) => setRecallDateInput(e.target.value)}
+                                    style={{ fontSize: "0.85rem", padding: "0.5rem", height: "36px" }}
+                                  />
+                                </div>
+
+                                <div style={{ flex: "2 1 250px" }}>
+                                  <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: "0.25rem" }}>Notes</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Scheduler Notes..."
+                                    value={recallNotesInput}
+                                    onChange={(e) => setRecallNotesInput(e.target.value)}
+                                    style={{ fontSize: "0.85rem", padding: "0.5rem", height: "36px" }}
+                                  />
+                                </div>
+
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  style={{ height: "36px", paddingInline: "1rem" }}
+                                  onClick={() => handleAddRecall(pat.id)}
+                                >
+                                  <i className="fa-solid fa-clock"></i> Schedule Recall
+                                </button>
+                              </div>
+
+                              <div className="table-wrapper" style={{ maxHeight: "200px", overflowY: "auto" }}>
+                                <table style={{ fontSize: "0.8rem" }}>
+                                  <thead>
+                                    <tr>
+                                      <th>Recall Type</th>
+                                      <th>Due Date</th>
+                                      <th>Notes</th>
+                                      <th>Status</th>
+                                      <th>Actions</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {(() => {
+                                      const patientRecalls = dentalRecalls[pat.id] || [];
+                                      return (
+                                        <>
+                                          {patientRecalls.map(item => (
+                                            <tr key={item.id}>
+                                              <td style={{ fontWeight: 600 }}>{item.type}</td>
+                                              <td style={{ fontWeight: 600, color: "var(--primary)" }}>{formatDate(item.dueDate)}</td>
+                                              <td style={{ color: "var(--text-secondary)" }}>{item.notes}</td>
+                                              <td>
+                                                <span
+                                                  onClick={() => handleToggleRecallStatus(item.id, pat.id)}
+                                                  className={`badge ${item.status === "completed" ? "badge-success" : "badge-info"}`}
+                                                  style={{ cursor: "pointer", fontSize: "0.7rem", padding: "2px 8px" }}
+                                                  title="Click to toggle status"
+                                                >
+                                                  {item.status}
+                                                </span>
+                                              </td>
+                                              <td>
+                                                <button
+                                                  type="button"
+                                                  className="btn btn-danger btn-sm"
+                                                  style={{ padding: "2px 6px" }}
+                                                  onClick={() => handleDeleteRecall(item.id, pat.id)}
+                                                >
+                                                  &times;
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                          {patientRecalls.length === 0 && (
+                                            <tr>
+                                              <td colSpan={5} style={{ textAlign: "center", color: "var(--text-secondary)" }}>
+                                                No recalls scheduled yet.
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -2433,14 +4237,14 @@ export default function MedLinkApp() {
             {((currentUser.role === "doctor" || currentUser.role === "assistant") && activePage === "calendar") && (() => {
               const targetDocId = currentUser.role === "doctor" ? currentUser.id : currentUser.doctorId;
               const docProfile = doctors.find(d => d.id === targetDocId);
-              
+
               const year = calendarDate.getFullYear();
               const month = calendarDate.getMonth();
               const monthName = calendarDate.toLocaleString("en-US", { month: "long", year: "numeric" });
-              
+
               const firstDay = new Date(year, month, 1).getDay(); // 0 is Sunday
               const totalDays = new Date(year, month + 1, 0).getDate();
-              
+
               const calendarCells: (Date | null)[] = [];
               for (let i = 0; i < firstDay; i++) {
                 calendarCells.push(null);
@@ -2451,14 +4255,14 @@ export default function MedLinkApp() {
               while (calendarCells.length % 7 !== 0) {
                 calendarCells.push(null);
               }
-              
+
               const getLocalDateString = (d: Date) => {
                 const y = d.getFullYear();
                 const m = String(d.getMonth() + 1).padStart(2, "0");
                 const day = String(d.getDate()).padStart(2, "0");
                 return `${y}-${m}-${day}`;
               };
-              
+
               const getSessionType = (timeStr: string) => {
                 if (!timeStr) return "morning";
                 const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
@@ -2476,24 +4280,24 @@ export default function MedLinkApp() {
                 }
                 return "morning";
               };
-              
+
               const handlePrevMonth = () => {
                 setCalendarDate(new Date(year, month - 1, 1));
               };
-              
+
               const handleNextMonth = () => {
                 setCalendarDate(new Date(year, month + 1, 1));
               };
-              
+
               return (
                 <section className="page-section animate-fade-in">
                   <div className="panel" style={{ padding: "1.5rem" }}>
                     <div className="panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
                       <h3 className="panel-title">
-                        <i className="fa-solid fa-calendar-days" style={{ color: "var(--primary)" }}></i> 
+                        <i className="fa-solid fa-calendar-days" style={{ color: "var(--primary)" }}></i>
                         {currentUser.role === "assistant" ? `Dr. ${docProfile?.name || ""}'s Consulting Schedule` : "Consultation Load Calendar"}
                       </h3>
-                      
+
                       <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
                         <button type="button" className="btn btn-outline btn-sm" onClick={handlePrevMonth}>
                           <i className="fa-solid fa-chevron-left"></i> Prev
@@ -2504,16 +4308,17 @@ export default function MedLinkApp() {
                         </button>
                       </div>
                     </div>
-                    
-                    <div className="calendar-grid-monthly" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "0.75rem" }}>
+
+                    <div className="calendar-scroll-container" style={{ overflowX: "auto", width: "100%", WebkitOverflowScrolling: "touch", paddingBottom: "0.5rem" }}>
+                      <div className="calendar-grid-monthly" style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "0.75rem", minWidth: "750px" }}>
                       {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
-                        <div 
-                          key={d} 
-                          className="calendar-header-day" 
-                          style={{ 
-                            textAlign: "center", 
-                            fontWeight: 700, 
-                            padding: "0.5rem", 
+                        <div
+                          key={d}
+                          className="calendar-header-day"
+                          style={{
+                            textAlign: "center",
+                            fontWeight: 700,
+                            padding: "0.5rem",
                             color: d === "Sun" || d === "Sat" ? "var(--text-secondary)" : "var(--text-primary)",
                             fontSize: "0.85rem",
                             textTransform: "uppercase",
@@ -2523,34 +4328,34 @@ export default function MedLinkApp() {
                           {d}
                         </div>
                       ))}
-                      
+
                       {calendarCells.map((cellDate, idx) => {
                         if (!cellDate) {
                           return (
-                            <div 
-                              key={`empty-${idx}`} 
-                              style={{ 
-                                background: "transparent", 
-                                border: "1px dashed var(--border)", 
+                            <div
+                              key={`empty-${idx}`}
+                              style={{
+                                background: "transparent",
+                                border: "1px dashed var(--border)",
                                 opacity: 0.15,
                                 borderRadius: "8px",
-                                minHeight: "110px" 
-                              }} 
+                                minHeight: "110px"
+                              }}
                             />
                           );
                         }
-                        
+
                         const dateStr = getLocalDateString(cellDate);
                         const dayApps = appointments.filter(
                           a => a.doctorId === targetDocId && a.appointmentDate === dateStr && a.status !== "cancelled"
                         );
-                        
+
                         const morningApps = dayApps.filter(a => a.status !== "blocked" && getSessionType(a.appointmentTime) === "morning");
                         const eveningApps = dayApps.filter(a => a.status !== "blocked" && getSessionType(a.appointmentTime) === "evening");
                         const blockedApps = dayApps.filter(a => a.status === "blocked");
-                        
+
                         const totalActive = morningApps.length + eveningApps.length;
-                        
+
                         let loadColor = "var(--border)";
                         let glowClass = "";
                         if (totalActive > 20) {
@@ -2561,18 +4366,18 @@ export default function MedLinkApp() {
                         } else if (totalActive > 0) {
                           loadColor = "var(--success)";
                         }
-                        
+
                         const isToday = getLocalDateString(new Date()) === dateStr;
-                        
+
                         return (
-                          <div 
-                            key={dateStr} 
+                          <div
+                            key={dateStr}
                             onClick={() => setSelectedCalendarDateStr(dateStr)}
                             className={`calendar-day-card ${glowClass}`}
-                            style={{ 
-                              cursor: "pointer", 
-                              border: isToday ? "2px solid var(--secondary)" : `1px solid ${loadColor}`, 
-                              borderRadius: "8px", 
+                            style={{
+                              cursor: "pointer",
+                              border: isToday ? "2px solid var(--secondary)" : `1px solid ${loadColor}`,
+                              borderRadius: "8px",
                               padding: "0.75rem",
                               minHeight: "115px",
                               display: "flex",
@@ -2584,8 +4389,8 @@ export default function MedLinkApp() {
                             }}
                           >
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span style={{ 
-                                fontWeight: 700, 
+                              <span style={{
+                                fontWeight: 700,
                                 fontSize: "1.05rem",
                                 color: isToday ? "var(--secondary)" : "var(--text-primary)"
                               }}>
@@ -2597,7 +4402,7 @@ export default function MedLinkApp() {
                                 </span>
                               )}
                             </div>
-                            
+
                             <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginTop: "0.5rem" }}>
                               {morningApps.length > 0 && (
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
@@ -2619,6 +4424,7 @@ export default function MedLinkApp() {
                         );
                       })}
                     </div>
+                    </div>
                   </div>
                 </section>
               );
@@ -2638,7 +4444,7 @@ export default function MedLinkApp() {
               // 2. Fetch doctor appointments & filter
               const docApps = appointments.filter(a => a.doctorId === currentUser.id);
               const completedApps = docApps.filter(a => a.status === "completed");
-              
+
               // 3. Compute stats for summary cards
               const totalAppsCount = docApps.length;
               const completedAppsCount = completedApps.length;
@@ -2666,7 +4472,7 @@ export default function MedLinkApp() {
               const activeAppsForDiagnoses = analyticsMonthFilter === "all"
                 ? completedApps
                 : completedApps.filter(a => a.appointmentDate.startsWith(analyticsMonthFilter));
-              
+
               const doctorSpecialty = doctors.find(d => d.id === currentUser.id)?.speciality || "General Practitioner";
               const diagnosesProfile = getDiagnosesProfile(doctorSpecialty, activeAppsForDiagnoses.length);
               const totalDiagnosesCases = diagnosesProfile.reduce((sum, d) => sum + d.cases, 0);
@@ -2767,7 +4573,7 @@ export default function MedLinkApp() {
                         <p>Total Consultations</p>
                       </div>
                     </div>
-                    
+
                     <div className="stat-card" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
                       <div className="stat-icon secondary"><i className="fa-solid fa-indian-rupee-sign"></i></div>
                       <div className="stat-info" style={{ flex: 1 }}>
@@ -2809,16 +4615,16 @@ export default function MedLinkApp() {
                   </div>
 
                   {/* Charts Grid */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
-                    
+                  <div className="analytics-grid">
+
                     {/* Monthly Volume Bar Chart */}
                     <div className="panel" style={{ padding: "1.5rem" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
                         <h3 className="panel-title"><i className="fa-solid fa-chart-bar" style={{ color: "var(--primary)" }}></i> Monthly Consultation Volume</h3>
                         {analyticsMonthFilter !== "all" && (
-                          <button 
-                            type="button" 
-                            className="btn btn-outline btn-sm" 
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
                             onClick={() => setAnalyticsMonthFilter("all")}
                             style={{ fontSize: "0.75rem", padding: "2px 6px" }}
                           >
@@ -2896,7 +4702,7 @@ export default function MedLinkApp() {
                       <h3 className="panel-title" style={{ width: "100%", alignSelf: "flex-start" }}>
                         <i className="fa-solid fa-chart-pie" style={{ color: "var(--secondary)" }}></i> Diagnoses Profile
                       </h3>
-                      
+
                       {totalDiagnosesCases === 0 ? (
                         <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", padding: "3rem 0", textAlign: "center" }}>
                           No clinical diagnostics locked in this period.
@@ -2926,9 +4732,9 @@ export default function MedLinkApp() {
                                   onMouseLeave={() => setHoveredDonutIdx(null)}
                                 />
                               ))}
-                              
+
                               <circle cx="80" cy="80" r="38" fill="var(--surface)" />
-                              
+
                               {hoveredDonutIdx !== null ? (
                                 <>
                                   <text x="80" y="76" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="var(--text-primary)">
@@ -2953,13 +4759,13 @@ export default function MedLinkApp() {
 
                           <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.35rem", fontSize: "0.75rem" }}>
                             {donutSegments.map((seg, idx) => (
-                              <div 
-                                key={idx} 
-                                style={{ 
-                                  display: "flex", 
-                                  justifyContent: "space-between", 
-                                  alignItems: "center", 
-                                  padding: "0.25rem 0.5rem", 
+                              <div
+                                key={idx}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "0.25rem 0.5rem",
                                   borderRadius: 4,
                                   background: hoveredDonutIdx === idx ? "var(--background)" : "transparent",
                                   transition: "background 0.2s"
@@ -2988,9 +4794,9 @@ export default function MedLinkApp() {
                       </h3>
                       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                         <label style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600 }}>Month Filter:</label>
-                        <select 
-                          value={analyticsMonthFilter} 
-                          onChange={(e) => setAnalyticsMonthFilter(e.target.value)} 
+                        <select
+                          value={analyticsMonthFilter}
+                          onChange={(e) => setAnalyticsMonthFilter(e.target.value)}
                           style={{ width: 130, padding: "4px 8px", borderRadius: 6, fontSize: "0.8rem" }}
                         >
                           <option value="all">All Months</option>
@@ -3017,12 +4823,12 @@ export default function MedLinkApp() {
                           const completionRate = Math.round((completedRefs / totalRefs) * 100);
 
                           return (
-                            <div 
+                            <div
                               key={rec.doctorId}
                               className="glass-card"
-                              style={{ 
-                                padding: "1.25rem", 
-                                borderLeft: "4px solid var(--secondary)", 
+                              style={{
+                                padding: "1.25rem",
+                                borderLeft: "4px solid var(--secondary)",
                                 cursor: "pointer"
                               }}
                               onClick={() => setExpandedReferredDocId(isExpanded ? null : rec.doctorId)}
@@ -3101,22 +4907,22 @@ export default function MedLinkApp() {
                     <form onSubmit={handleRegisterAssistant} style={{ marginTop: "1.25rem" }}>
                       <div className="form-group">
                         <label style={{ fontWeight: 600 }}>Full Name</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. Alex Assistant" 
-                          value={newAssistantName} 
-                          onChange={(e) => setNewAssistantName(e.target.value)} 
-                          required 
+                        <input
+                          type="text"
+                          placeholder="e.g. Alex Assistant"
+                          value={newAssistantName}
+                          onChange={(e) => setNewAssistantName(e.target.value)}
+                          required
                         />
                       </div>
                       <div className="form-group">
                         <label style={{ fontWeight: 600 }}>Phone Number</label>
-                        <input 
-                          type="tel" 
-                          placeholder="e.g. 9898989898" 
-                          value={newAssistantPhone} 
-                          onChange={(e) => setNewAssistantPhone(e.target.value)} 
-                          required 
+                        <input
+                          type="tel"
+                          placeholder="e.g. 9898989898"
+                          value={newAssistantPhone}
+                          onChange={(e) => setNewAssistantPhone(e.target.value)}
+                          required
                         />
                         <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "0.25rem", display: "block" }}>
                           Used for sandbox OTP login (verification code will be <strong>1234</strong>)
@@ -3136,7 +4942,7 @@ export default function MedLinkApp() {
                       </h3>
                       <span className="badge badge-info">{assistants.length} Active</span>
                     </div>
-                    
+
                     <div style={{ marginTop: "1.25rem" }}>
                       {assistants.length === 0 ? (
                         <div style={{ textAlign: "center", padding: "3rem", border: "1px dashed var(--border)", borderRadius: "12px", background: "var(--glass)" }}>
@@ -3147,30 +4953,30 @@ export default function MedLinkApp() {
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                           {assistants.map(ast => (
-                            <div 
-                              key={ast.id} 
-                              className="glass-card" 
-                              style={{ 
-                                display: "flex", 
-                                justifyContent: "space-between", 
-                                alignItems: "center", 
-                                padding: "1.25rem", 
+                            <div
+                              key={ast.id}
+                              className="glass-card"
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                padding: "1.25rem",
                                 borderLeft: "4px solid var(--primary)",
                                 background: "var(--glass)",
                                 borderRadius: "10px"
                               }}
                             >
                               <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                                <div style={{ 
-                                  width: "45px", 
-                                  height: "45px", 
-                                  borderRadius: "50%", 
+                                <div style={{
+                                  width: "45px",
+                                  height: "45px",
+                                  borderRadius: "50%",
                                   background: "linear-gradient(135deg, var(--primary) 0%, #0369a1 100%)",
-                                  color: "white", 
-                                  display: "flex", 
-                                  alignItems: "center", 
-                                  justifyContent: "center", 
-                                  fontWeight: 700 
+                                  color: "white",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontWeight: 700
                                 }}>
                                   {ast.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
                                 </div>
@@ -3182,8 +4988,8 @@ export default function MedLinkApp() {
                                   </div>
                                 </div>
                               </div>
-                              <button 
-                                className="btn btn-outline btn-danger btn-sm" 
+                              <button
+                                className="btn btn-outline btn-danger btn-sm"
                                 style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
                                 onClick={() => handleDeleteAssistant(ast.id)}
                               >
@@ -3191,6 +4997,227 @@ export default function MedLinkApp() {
                               </button>
                             </div>
                           ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+
+            {/* ==================== MY CLINICS PAGE ==================== */}
+            {currentUser.role === "doctor" && activePage === "my-clinics" && (
+              <section className="page-section animate-fade-in">
+                <div className="dash-row">
+                  {/* Left Column: Add New Clinic */}
+                  <div className="panel" style={{ flex: 1, minWidth: "320px" }}>
+                    <div className="panel-header">
+                      <h3 className="panel-title">
+                        <i className="fa-solid fa-circle-plus" style={{ color: "var(--primary)" }}></i> Add Clinic / Hospital
+                      </h3>
+                      <span className="badge badge-info">{doctorClinics.length}/10</span>
+                    </div>
+                    {doctorClinics.length >= 10 ? (
+                      <div style={{ textAlign: "center", padding: "2rem", border: "1px dashed var(--border)", borderRadius: "12px", background: "var(--glass)", marginTop: "1.25rem" }}>
+                        <i className="fa-solid fa-circle-check" style={{ fontSize: "2rem", color: "var(--success)", marginBottom: "0.5rem" }}></i>
+                        <p style={{ color: "var(--text-secondary)" }}>Maximum of 10 secondary clinics reached.</p>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleAddClinic} style={{ marginTop: "1.25rem" }}>
+                        <div className="form-group">
+                          <label style={{ fontWeight: 600 }}>Clinic / Hospital Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Apollo Hospital, City Medical Center"
+                            value={newClinicName}
+                            onChange={(e) => setNewClinicName(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label style={{ fontWeight: 600 }}>Full Address</label>
+                          <textarea
+                            rows={2}
+                            placeholder="e.g. Block-C, Jubilee Hills, Metro City"
+                            value={newClinicAddress}
+                            onChange={(e) => setNewClinicAddress(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label style={{ fontWeight: 600 }}>Phone (Optional)</label>
+                          <input
+                            type="tel"
+                            placeholder="e.g. 0401234567"
+                            value={newClinicPhone}
+                            onChange={(e) => setNewClinicPhone(e.target.value)}
+                          />
+                        </div>
+                        <button type="submit" className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: "1rem" }}>
+                          <i className="fa-solid fa-plus"></i> Add Clinic
+                        </button>
+                      </form>
+                    )}
+                  </div>
+
+                  {/* Right Column: All Clinics List */}
+                  <div className="panel" style={{ flex: 2, minWidth: "450px" }}>
+                    <div className="panel-header">
+                      <h3 className="panel-title">
+                        <i className="fa-solid fa-hospital" style={{ color: "var(--secondary)" }}></i> Your Practice Locations
+                      </h3>
+                      <span className="badge badge-info">{1 + doctorClinics.length} Total</span>
+                    </div>
+
+                    <div style={{ marginTop: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                      {/* Primary Clinic Card */}
+                      {(() => {
+                        const myDoc = doctors.find(d => d.id === currentUser.id);
+                        return (
+                          <div
+                            className="glass-card"
+                            style={{
+                              padding: "1.25rem",
+                              borderLeft: "4px solid var(--success)",
+                              background: "var(--glass)",
+                              borderRadius: "10px"
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                                <div style={{
+                                  width: "45px",
+                                  height: "45px",
+                                  borderRadius: "50%",
+                                  background: "linear-gradient(135deg, var(--success) 0%, #059669 100%)",
+                                  color: "white",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: "1.1rem"
+                                }}>
+                                  <i className="fa-solid fa-star"></i>
+                                </div>
+                                <div>
+                                  <h4 style={{ margin: 0, fontSize: "1.1rem" }}>{myDoc?.clinicName || "Primary Clinic"}</h4>
+                                  <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
+                                    <i className="fa-solid fa-location-dot"></i> {myDoc?.clinicAddress || "—"}
+                                  </div>
+                                </div>
+                              </div>
+                              <span className="badge badge-success" style={{ flexShrink: 0 }}>Primary</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Secondary Clinics */}
+                      {doctorClinics.length === 0 ? (
+                        <div style={{ textAlign: "center", padding: "2.5rem", border: "1px dashed var(--border)", borderRadius: "12px", background: "var(--glass)" }}>
+                          <i className="fa-solid fa-hospital" style={{ fontSize: "2.5rem", color: "var(--text-secondary)", marginBottom: "1rem", opacity: 0.5 }}></i>
+                          <p style={{ color: "var(--text-secondary)" }}>No secondary clinics added yet.</p>
+                          <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>Use the form on the left to add additional practice locations.</p>
+                        </div>
+                      ) : (
+                        doctorClinics.map((clinic: any) => (
+                          <div
+                            key={clinic.id}
+                            className="glass-card"
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              padding: "1.25rem",
+                              borderLeft: "4px solid var(--primary)",
+                              background: "var(--glass)",
+                              borderRadius: "10px"
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                              <div style={{
+                                width: "45px",
+                                height: "45px",
+                                borderRadius: "50%",
+                                background: "linear-gradient(135deg, var(--primary) 0%, #0369a1 100%)",
+                                color: "white",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "1.1rem"
+                              }}>
+                                <i className="fa-solid fa-hospital"></i>
+                              </div>
+                              <div>
+                                <h4 style={{ margin: 0, fontSize: "1.05rem" }}>{clinic.name}</h4>
+                                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>
+                                  <i className="fa-solid fa-location-dot"></i> {clinic.address}
+                                </div>
+                                {clinic.phone && (
+                                  <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>
+                                    <i className="fa-solid fa-phone"></i> {clinic.phone}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              className="btn btn-outline btn-danger btn-sm"
+                              style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", flexShrink: 0 }}
+                              onClick={() => handleDeleteClinic(clinic.id)}
+                            >
+                              <i className="fa-regular fa-trash-can"></i> Remove
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Digital Signature Settings Panel */}
+                <div className="panel" style={{ marginTop: "1.5rem" }}>
+                  <div className="panel-header">
+                    <h3 className="panel-title">
+                      <i className="fa-solid fa-signature" style={{ color: "var(--primary)" }}></i> Digital Signature Settings
+                    </h3>
+                  </div>
+                  <div style={{ display: "flex", gap: "2rem", alignItems: "flex-start", flexWrap: "wrap", marginTop: "1.25rem" }}>
+                    <div style={{ flex: 1, minWidth: "280px" }}>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.25rem", lineHeight: 1.6 }}>
+                        Your digital signature is printed on all issued Prescription Slips. You can paste an image URL, a base64 encoded string, or use the reset button to generate a clean dynamic signature based on your name.
+                      </p>
+                      <div className="form-group">
+                        <label style={{ fontWeight: 600, fontSize: "0.85rem" }}>Signature URL / Base64 Content</label>
+                        <textarea
+                          rows={4}
+                          placeholder="data:image/svg+xml;base64,... or https://..."
+                          value={doctorSignatureUrl}
+                          onChange={(e) => setDoctorSignatureUrl(e.target.value)}
+                          style={{ fontFamily: "monospace", fontSize: "0.8rem", resize: "vertical" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+                        <button className="btn btn-primary" onClick={handleSaveSignature}>
+                          <i className="fa-solid fa-floppy-disk"></i> Save Signature
+                        </button>
+                        <button className="btn btn-outline" onClick={handleResetSignature}>
+                          Reset Default Signature
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", border: "1px dashed var(--border)", padding: "1.5rem", borderRadius: "var(--radius-md)", background: "var(--background)", minWidth: "240px", justifyContent: "center" }}>
+                      <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 600, marginBottom: "1rem" }}>Active Signature Preview</span>
+                      {doctorSignatureUrl ? (
+                        <div style={{ border: "1px solid var(--border)", padding: "0.5rem", borderRadius: "6px", backgroundColor: "white", display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100px", minWidth: "200px" }}>
+                          <img 
+                            src={doctorSignatureUrl} 
+                            alt="Signature Preview" 
+                            style={{ maxHeight: "80px", maxWidth: "180px", objectFit: "contain" }} 
+                          />
+                        </div>
+                      ) : (
+                        <div style={{ height: "100px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)", fontSize: "0.85rem", border: "1px solid var(--border)", borderRadius: "6px", width: "200px", backgroundColor: "white" }}>
+                          No signature uploaded
                         </div>
                       )}
                     </div>
@@ -3211,7 +5238,7 @@ export default function MedLinkApp() {
                       <div style={{ display: "flex", gap: "2rem", fontSize: "0.85rem", color: "#1e40af" }}>
                         <div><strong>Blood Group:</strong> {activeDetails.bloodGroup || "N/A"}</div>
                         <div><strong>Allergies:</strong> <span style={{ color: "var(--danger)", fontWeight: 600 }}>{activeDetails.allergies || "None"}</span></div>
-                        <div><strong>Chronic:</strong> {activeDetails.chronicConditions || "None"}</div>
+                        <div><strong>History:</strong> {activeDetails.chronicConditions || "None"}</div>
                       </div>
                     ) : null;
                   })()}
@@ -3259,11 +5286,14 @@ export default function MedLinkApp() {
                         <button className="btn btn-outline" style={{ justifyContent: "flex-start", width: "100%" }} onClick={() => setActivePage("find-doctors")}>
                           <i className="fa-solid fa-user-doctor" style={{ color: "var(--primary)" }}></i> Find Doctors
                         </button>
-                        <button className="btn btn-outline" style={{ justifyContent: "flex-start", width: "100%" }} onClick={() => setActivePage("records-wallet")}>
-                          <i className="fa-solid fa-file-invoice" style={{ color: "var(--secondary)" }}></i> Health Wallet Records
+                        <button className="btn btn-outline" style={{ justifyContent: "flex-start", width: "100%" }} onClick={() => setActivePage("lab-history")}>
+                          <i className="fa-solid fa-microscope" style={{ color: "var(--secondary)" }}></i> Lab Test History
+                        </button>
+                        <button className="btn btn-outline" style={{ justifyContent: "flex-start", width: "100%" }} onClick={() => setActivePage("consultation-history")}>
+                          <i className="fa-solid fa-notes-medical" style={{ color: "var(--primary)" }}></i> Consultation History
                         </button>
                         <button className="btn btn-outline" style={{ justifyContent: "flex-start", width: "100%" }} onClick={() => setActivePage("pharmacy")}>
-                          <i className="fa-solid fa-pills" style={{ color: "var(--warning)" }}></i> Order Prescriptions
+                          <i className="fa-solid fa-pills" style={{ color: "var(--warning)" }}></i> Medicine History
                         </button>
                       </div>
                     </div>
@@ -3303,9 +5333,9 @@ export default function MedLinkApp() {
                             <div><i className="fa-solid fa-location-dot"></i> {doc.clinicAddress}</div>
                           </div>
                         </div>
-                        <a 
-                          href={doc.phone ? `tel:${doc.phone}` : "#"} 
-                          className="btn btn-outline" 
+                        <a
+                          href={doc.phone ? `tel:${doc.phone}` : "#"}
+                          className="btn btn-outline"
                           style={{ width: "100%", justifyContent: "center", gap: "0.5rem", textDecoration: "none" }}
                         >
                           <i className="fa-solid fa-phone"></i> Call to Book: {doc.phone || "N/A"}
@@ -3317,53 +5347,33 @@ export default function MedLinkApp() {
               </section>
             )}
 
-            {currentUser.role === "patient" && activePage === "records-wallet" && (() => {
-              const combinedRecords: any[] = [
-                ...labReports.filter(r => {
-                  if (r.patientId !== currentUser.id) return false;
-                  const app = appointments.find(a => a.id === r.appointmentId);
-                  if (!app) {
-                    return activePatientId === currentUser.id;
-                  }
-                  return activePatientId === currentUser.id ? !app.familyMemberId : app.familyMemberId === activePatientId;
-                }).map(r => ({
-                  id: r.id,
-                  type: "report",
-                  date: new Date(r.uploadedAt),
-                  title: r.reportTitle,
-                  reportType: r.reportType,
-                  provider: r.uploadedBy === "LAB-00001" ? "Apex Diagnostics Center" : (r.uploadedBy === "LAB-00002" ? "Metro Pathology Labs" : `Self-uploaded (${r.uploadedBy})`),
-                  findings: r.findings,
-                  notes: r.notes,
-                  fileName: r.fileName,
-                  fileUrl: r.fileUrl,
-                  raw: r
-                })),
-                ...appointments.filter(a => a.patientId === currentUser.id && (activePatientId === currentUser.id ? !a.familyMemberId : a.familyMemberId === activePatientId) && a.status === "completed").map(app => {
-                  const doc = doctors.find(d => d.id === app.doctorId);
-                  return {
-                    id: app.id,
-                    type: "prescription",
-                    date: new Date(app.appointmentDate),
-                    title: "Consultation Prescription Slip",
-                    reportType: "prescription",
-                    provider: doc ? `Dr. ${doc.name} (${doc.speciality})` : "Attending Doctor",
-                    appointmentId: app.id,
-                    raw: app
-                  };
-                })
-              ];
+            {currentUser.role === "patient" && activePage === "lab-history" && (() => {
+              // 1. Get patient appointments
+              const patApps = appointments.filter(a => {
+                if (a.patientId !== currentUser.id) return false;
+                return activePatientId === currentUser.id ? !a.familyMemberId : a.familyMemberId === activePatientId;
+              });
 
-              combinedRecords.sort((a, b) => b.date.getTime() - a.date.getTime());
+              // 2. Filter for those with lab history (has lab order or lab report)
+              const apptsWithLab = patApps.filter(app => {
+                const hasOrder = labOrders.some(o => o.appointmentId === app.id);
+                const hasReport = labReports.some(r => r.appointmentId === app.id);
+                return hasOrder || hasReport;
+              });
+
+              // 3. Sort latest to oldest
+              const sortedAppts = [...apptsWithLab].sort((a, b) => {
+                return new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime();
+              });
 
               return (
                 <section className="page-section">
                   <div className="panel">
                     <div className="panel-header" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "1rem", marginBottom: "1.5rem" }}>
-                      <h3 className="panel-title"><i className="fa-solid fa-folder-open"></i> Clinical Records Wallet</h3>
-                      <button 
-                        type="button" 
-                        className="btn btn-secondary btn-sm" 
+                      <h3 className="panel-title"><i className="fa-solid fa-microscope"></i> Lab History</h3>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
                         onClick={() => {
                           setDirectUploadRole("patient");
                           setDirectUploadAppId("");
@@ -3379,106 +5389,268 @@ export default function MedLinkApp() {
                       </button>
                     </div>
 
-                    {combinedRecords.length === 0 ? (
-                      <p style={{ textAlign: "center", color: "var(--text-secondary)", padding: "3rem 0" }}>
-                        No prescriptions or laboratory reports found in your records folder.
-                      </p>
+                    {sortedAppts.length === 0 ? (
+                      <div style={{ padding: "3rem 0", textAlign: "center" }}>
+                        <p style={{ color: "var(--text-secondary)", marginBottom: "1.5rem" }}>
+                          No lab test prescriptions or uploaded reports found in your history.
+                        </p>
+                      </div>
                     ) : (
-                      <div className="records-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "1.5rem" }}>
-                        {combinedRecords.map(item => {
-                          const isRx = item.type === "prescription";
-                          let icon = <i className="fa-solid fa-file-prescription" style={{ color: "var(--primary)" }}></i>;
-                          let themeColor = "var(--primary)";
-                          let badgeText = "Prescription";
-                          let badgeClass = "badge-info";
+                      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+                        {sortedAppts.map(app => {
+                          const doc = doctors.find(d => d.id === app.doctorId);
+                          const appOrder = labOrders.find(o => o.appointmentId === app.id);
+                          const appReports = labReports.filter(r => r.appointmentId === app.id);
+                          const isCompleted = appReports.length > 0;
 
-                          if (!isRx) {
-                            badgeText = "Lab Report";
-                            badgeClass = "badge-success";
-                            if (item.reportType === "x-ray") {
-                              icon = <i className="fa-solid fa-radiation" style={{ color: "#eab308" }}></i>;
-                              themeColor = "#eab308";
-                              badgeText = "X-Ray Film";
-                              badgeClass = "badge-warning";
-                            } else if (item.reportType === "ct-scan" || item.reportType === "mri") {
-                              icon = <i className="fa-solid fa-circle-nodes" style={{ color: "#a855f7" }}></i>;
-                              themeColor = "#a855f7";
-                              badgeText = "Diagnostic Scan";
-                              badgeClass = "badge-danger";
-                            } else if (item.reportType === "blood-test" || item.reportType === "urine-test") {
-                              icon = <i className="fa-solid fa-flask" style={{ color: "#ef4444" }}></i>;
-                              themeColor = "#ef4444";
-                              badgeText = "Pathology Lab";
-                            } else {
-                              icon = <i className="fa-solid fa-microscope" style={{ color: "#10b981" }}></i>;
-                              themeColor = "#10b981";
-                            }
-                          }
+                          // Style variables based on status
+                          const themeColor = isCompleted ? "var(--secondary)" : "var(--warning)";
+                          const badgeClass = isCompleted ? "badge-success" : "badge-warning";
+                          const badgeText = isCompleted ? "Completed" : "Prescribed & Outstanding";
+                          const icon = isCompleted ? <i className="fa-solid fa-flask" style={{ color: "var(--secondary)" }}></i> : <i className="fa-solid fa-circle-exclamation" style={{ color: "var(--warning)" }}></i>;
 
                           return (
-                            <div key={item.id} className="glass-card" style={{ borderTop: `4px solid ${themeColor}` }}>
-                              <div>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                                  <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 600 }}>
-                                    {formatDate(item.date.toISOString())}
+                            <div key={app.id} className="glass-card" style={{ borderTop: `4px solid ${themeColor}`, display: "flex", flexDirection: "column", gap: "1rem", padding: "1.5rem" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "0.5rem" }}>
+                                <div>
+                                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 600 }}>
+                                    {formatDate(app.appointmentDate)} at {app.appointmentTime}
+                                  </div>
+                                  <h4 style={{ margin: "0.25rem 0 0 0", fontSize: "1.1rem", fontWeight: 700 }}>
+                                    Consultation with Dr. {doc?.name || "Attending Specialist"}
+                                  </h4>
+                                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                                    {doc?.clinicName || "Practice Clinic"}
                                   </span>
-                                  <span className={`badge ${badgeClass}`} style={{ fontSize: "0.7rem", textTransform: "uppercase" }}>
-                                    {badgeText}
-                                  </span>
+                                  <div style={{ marginTop: "0.35rem", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                                    Appointment: <code style={{ fontSize: "0.72rem" }}>{app.id}</code>
+                                  </div>
                                 </div>
-                                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
-                                  <div style={{ width: 45, height: 45, borderRadius: "50%", background: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.25rem", border: "1px solid var(--border)" }}>
+                                <span className={`badge ${badgeClass}`} style={{ fontSize: "0.75rem", textTransform: "uppercase" }}>
+                                  {badgeText}
+                                </span>
+                              </div>
+
+                              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+                                <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginBottom: "0.5rem" }}>
+                                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--background)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>
                                     {icon}
                                   </div>
                                   <div>
-                                    <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "var(--text)" }}>{item.title}</h4>
-                                    <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-secondary)" }}>{item.provider}</p>
+                                    <h5 style={{ margin: 0, fontSize: "0.9rem", fontWeight: 650 }}>
+                                      {appOrder ? "Prescribed Diagnostics" : "Uploaded Lab Reports"}
+                                    </h5>
+                                    {appOrder && (
+                                      <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                                        {JSON.parse(appOrder.testsJson).map((t: any) => t.test_name).join(", ")}
+                                      </p>
+                                    )}
                                   </div>
-                                </div>
-
-                                <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", backgroundColor: "var(--background)", padding: "0.75rem", borderRadius: "6px", border: "1px solid var(--border)", marginBottom: "1rem" }}>
-                                  {isRx ? (
-                                    <div>
-                                      <strong>Medical consult:</strong> {item.raw.chiefComplaint || "Routine review."}
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <div style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                                        <strong>Findings:</strong> {item.findings}
-                                      </div>
-                                      {item.fileName && (
-                                        <div style={{ marginTop: "0.35rem", display: "flex", alignItems: "center", gap: "0.35rem", color: "var(--primary)", fontWeight: 600 }}>
-                                          <i className="fa-regular fa-file-pdf"></i> {item.fileName}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
                                 </div>
                               </div>
 
-                              <div>
-                                {isRx ? (
-                                  <button 
-                                    type="button" 
-                                    className="btn btn-outline" 
-                                    style={{ width: "100%", justifyContent: "center" }} 
-                                    onClick={() => loadPrescriptionPrint("", item.id)}
-                                  >
-                                    <i className="fa-solid fa-file-pdf"></i> View Prescription PDF
-                                  </button>
-                                ) : (
-                                  <button 
-                                    type="button" 
-                                    className="btn btn-primary" 
-                                    style={{ width: "100%", justifyContent: "center" }} 
+                              {appReports.length > 0 && (
+                                <div style={{ backgroundColor: "var(--background)", padding: "1rem", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                                  <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>Attached Documents</span>
+                                  {appReports.map(rep => (
+                                    <div key={rep.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", padding: "0.5rem 0", borderBottom: "1px solid var(--border)" }}>
+                                      <div>
+                                        <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{rep.reportTitle}</div>
+                                        <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{rep.fileName || "report.pdf"}</div>
+                                      </div>
+                                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                                        <button
+                                          type="button"
+                                          className="btn btn-outline btn-sm"
+                                          onClick={() => {
+                                            setViewPdfReport(rep);
+                                            setIsPdfModalOpen(true);
+                                          }}
+                                        >
+                                          <i className="fa-solid fa-file-pdf"></i> View PDF
+                                        </button>
+                                        {rep.fileUrl && (
+                                          <a
+                                            href={rep.fileUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            download={rep.fileName || "report.pdf"}
+                                            className="btn btn-secondary btn-sm"
+                                          >
+                                            <i className="fa-solid fa-download"></i> Download PDF
+                                          </a>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.5rem" }}>
+                                {!isCompleted ? (
+                                  <button
+                                    type="button"
+                                    className="btn"
+                                    style={{ width: "100%", justifyContent: "center", backgroundColor: "var(--warning)", color: "white", fontWeight: 600 }}
                                     onClick={() => {
-                                      setViewPdfReport(item.raw);
-                                      setIsPdfModalOpen(true);
+                                      setDirectUploadRole("patient");
+                                      setDirectUploadAppId(app.id);
+                                      setDirectUploadTitle(appOrder ? JSON.parse(appOrder.testsJson).map((t: any) => t.test_name).join(", ") + " Report" : "Lab Report");
+                                      setDirectUploadType("blood-test");
+                                      setDirectUploadFindings("");
+                                      setDirectUploadNotes("");
+                                      setDirectUploadFileName("");
+                                      setIsDirectUploadOpen(true);
                                     }}
                                   >
-                                    <i className="fa-solid fa-file-pdf"></i> View Simulated Report PDF
+                                    <i className="fa-solid fa-cloud-arrow-up"></i> Upload Test Report Document
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline btn-sm"
+                                    onClick={() => {
+                                      setDirectUploadRole("patient");
+                                      setDirectUploadAppId(app.id);
+                                      setDirectUploadTitle(appOrder ? JSON.parse(appOrder.testsJson).map((t: any) => t.test_name).join(", ") + " Report" : "Lab Report");
+                                      setDirectUploadType("blood-test");
+                                      setDirectUploadFindings("");
+                                      setDirectUploadNotes("");
+                                      setDirectUploadFileName("");
+                                      setIsDirectUploadOpen(true);
+                                    }}
+                                  >
+                                    <i className="fa-solid fa-cloud-arrow-up"></i> Upload Additional Report
                                   </button>
                                 )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              );
+            })()}
+
+            {currentUser.role === "patient" && activePage === "consultation-history" && (() => {
+              // 1. Get completed patient appointments
+              const patApps = appointments.filter(a => {
+                if (a.patientId !== currentUser.id) return false;
+                if (a.status !== "completed") return false;
+                return activePatientId === currentUser.id ? !a.familyMemberId : a.familyMemberId === activePatientId;
+              });
+
+              // 2. Sort latest to oldest
+              const sortedApps = [...patApps].sort((a, b) => {
+                return new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime();
+              });
+
+              return (
+                <section className="page-section">
+                  <div className="panel">
+                    <div className="panel-header" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "1rem", marginBottom: "1.5rem" }}>
+                      <h3 className="panel-title"><i className="fa-solid fa-notes-medical"></i> My Consultation History</h3>
+                    </div>
+
+                    {sortedApps.length === 0 ? (
+                      <div style={{ padding: "3rem 0", textAlign: "center" }}>
+                        <p style={{ color: "var(--text-secondary)" }}>
+                          No historical consultations found for this profile.
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+                        {sortedApps.map(app => {
+                          const doc = doctors.find(d => d.id === app.doctorId);
+                          const consult = consultations.find(c => c.appointmentId === app.id);
+                          const appReports = labReports.filter(r => r.appointmentId === app.id);
+
+                          return (
+                            <div key={app.id} className="glass-card" style={{ borderTop: "4px solid var(--primary)", display: "flex", flexDirection: "column", gap: "1rem", padding: "1.5rem" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "0.5rem" }}>
+                                <div>
+                                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 600 }}>
+                                    {formatDate(app.appointmentDate)} at {app.appointmentTime}
+                                  </div>
+                                  <h4 style={{ margin: "0.25rem 0 0 0", fontSize: "1.1rem", fontWeight: 700, color: "var(--primary)" }}>
+                                    Dr. {doc?.name || "Specialist"}
+                                  </h4>
+                                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                                    {doc?.speciality || "General Practitioner"} — {doc?.clinicName}
+                                  </span>
+                                </div>
+                                <span className="badge badge-success" style={{ fontSize: "0.75rem", textTransform: "uppercase" }}>
+                                  Completed
+                                </span>
+                              </div>
+
+                              <div style={{ fontSize: "0.85rem", color: "var(--text-primary)", display: "flex", flexDirection: "column", gap: "0.5rem", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+                                <div><strong>Chief Complaint:</strong> {app.chiefComplaint || "Routine consultation checkup."}</div>
+
+                                {consult && (
+                                  <>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "0.75rem", backgroundColor: "var(--background)", padding: "0.75rem", borderRadius: "8px", border: "1px solid var(--border)", margin: "0.25rem 0" }}>
+                                      {consult.bp && <div><strong>BP:</strong> {consult.bp} mmHg</div>}
+                                      {consult.pulse && <div><strong>Pulse:</strong> {consult.pulse} bpm</div>}
+                                      {consult.temp && <div><strong>Temp:</strong> {consult.temp} °F</div>}
+                                      {consult.spo2 && <div><strong>SpO2:</strong> {consult.spo2}%</div>}
+                                      {consult.weight && <div><strong>Weight:</strong> {consult.weight} kg</div>}
+                                      {consult.height && <div><strong>Height:</strong> {consult.height} cm</div>}
+                                    </div>
+
+                                    {consult.subjective && (
+                                      <div>
+                                        <strong>Patient Symptoms / Notes:</strong>
+                                        <p style={{ margin: "0.25rem 0 0 0", color: "var(--text-secondary)" }}>{consult.subjective}</p>
+                                      </div>
+                                    )}
+
+                                    {consult.assessment && (
+                                      <div>
+                                        <strong>Diagnosis & Assessment:</strong>
+                                        <p style={{ margin: "0.25rem 0 0 0", color: "var(--text-secondary)" }}>{consult.assessment}</p>
+                                      </div>
+                                    )}
+
+                                    {consult.plan && (
+                                      <div>
+                                        <strong>Treatment Plan & Advice:</strong>
+                                        <p style={{ margin: "0.25rem 0 0 0", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>{consult.plan}</p>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+
+                                {!consult && app.notes && (
+                                  <div>
+                                    <strong>Doctor Notes:</strong>
+                                    <p style={{ margin: "0.25rem 0 0 0", color: "var(--text-secondary)" }}>{app.notes}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", borderTop: "1px solid var(--border)", paddingTop: "1rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
+                                <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>Appointment: <code style={{ fontSize: "0.72rem" }}>{app.id}</code></span>
+                                <div style={{ display: "flex", gap: "0.75rem" }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline btn-sm"
+                                    onClick={() => loadPrescriptionPrint("", app.id)}
+                                  >
+                                    <i className="fa-solid fa-file-prescription"></i> Prescription Slip
+                                  </button>
+                                  {appReports.length > 0 && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      onClick={() => openViewReportsModal(app.id)}
+                                    >
+                                      <i className="fa-solid fa-file-waveform"></i> Diagnostic Reports ({appReports.length})
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );
@@ -3534,108 +5706,204 @@ export default function MedLinkApp() {
               </section>
             )}
 
-            {currentUser.role === "patient" && activePage === "pharmacy" && (
-              <section className="page-section">
-                <div className="panel">
-                  <div className="panel-header">
-                    <h3 className="panel-title"><i className="fa-solid fa-cart-shopping"></i> Online Pharmacy Catalogue</h3>
-                    <button className="btn btn-secondary cart-indicator" onClick={() => setIsCartOpen(true)}>
-                      <i className="fa-solid fa-basket-shopping"></i> View cart
-                      <span className="badge-count">{cartItems.reduce((s, i) => s + i.qty, 0)}</span>
-                    </button>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "1.5rem", marginTop: "1rem" }}>
-                    {getFilteredMedicines().map(med => (
-                      <div className="role-card" key={med.id} style={{ cursor: "default", textAlign: "left", alignItems: "flex-start", padding: "1.25rem" }}>
-                        <div style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: 700, textTransform: "uppercase", marginBottom: "0.25rem" }}>{med.category}</div>
-                        <h3 style={{ fontSize: "1.05rem", marginBottom: "0.25rem" }}>{med.name}</h3>
-                        <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginBottom: "0.75rem" }}>Formula: {med.genericName}</p>
-                        <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "0.75rem", marginTop: "auto" }}>
-                          <div>
-                            <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>{med.unit}</div>
-                            <div style={{ fontSize: "1.15rem", fontWeight: 800 }}>₹{med.price}</div>
-                          </div>
-                          <button className="btn btn-secondary btn-sm" onClick={() => handleAddToCart(med.id)}>
-                            <i className="fa-solid fa-cart-plus"></i> Add
-                          </button>
-                        </div>
+            {currentUser.role === "patient" && activePage === "pharmacy" && (() => {
+              // Get all prescriptions for this patient sorted newest first
+              const patRx = prescriptions
+                .filter(rx => rx.patientId === currentUser.id)
+                .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
+
+              return (
+                <section className="page-section">
+                  <div className="panel">
+                    <div className="panel-header" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "1rem", marginBottom: "1.5rem" }}>
+                      <h3 className="panel-title"><i className="fa-solid fa-pills"></i> Medicine History</h3>
+                      <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{patRx.length} prescription{patRx.length !== 1 ? "s" : ""} found</span>
+                    </div>
+
+                    {patRx.length === 0 ? (
+                      <div style={{ padding: "3rem 0", textAlign: "center" }}>
+                        <i className="fa-solid fa-pills" style={{ fontSize: "2.5rem", color: "var(--border)", marginBottom: "1rem", display: "block" }}></i>
+                        <p style={{ color: "var(--text-secondary)" }}>No prescriptions have been issued yet.</p>
+                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>Medicines prescribed during consultations will appear here.</p>
                       </div>
-                    ))}
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+                        {patRx.map(rx => {
+                          const app = appointments.find(a => a.id === rx.appointmentId);
+                          const doc = doctors.find(d => d.id === rx.doctorId);
+                          let meds: any[] = [];
+                          try { meds = JSON.parse(rx.medicinesJson); } catch { meds = []; }
+
+                          return (
+                            <div key={rx.id} className="glass-card" style={{ borderTop: "4px solid var(--primary)", padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                              {/* Card Header */}
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "0.5rem" }}>
+                                <div>
+                                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: 600 }}>
+                                    {app ? `${formatDate(app.appointmentDate)} at ${app.appointmentTime}` : formatDate(rx.issuedAt)}
+                                  </div>
+                                  <h4 style={{ margin: "0.25rem 0 0 0", fontSize: "1.05rem", fontWeight: 700, color: "var(--primary)" }}>
+                                    Dr. {doc?.name || "Attending Doctor"}
+                                  </h4>
+                                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                                    {doc?.speciality || "General Practitioner"}{doc?.clinicName ? ` — ${doc.clinicName}` : ""}
+                                  </span>
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem" }}>
+                                  <span className="badge badge-info" style={{ fontSize: "0.7rem", textTransform: "uppercase" }}>
+                                    <i className="fa-solid fa-prescription-bottle-medical"></i> {meds.length} Medicine{meds.length !== 1 ? "s" : ""}
+                                  </span>
+                                  {rx.validUntil && (
+                                    <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>Valid until {formatDate(rx.validUntil)}</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Medicines Table */}
+                              {meds.length > 0 && (
+                                <div style={{ borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+                                  <div className="table-wrapper" style={{ margin: 0 }}>
+                                    <table style={{ fontSize: "0.85rem" }}>
+                                      <thead>
+                                        <tr>
+                                          <th style={{ width: "30%" }}>Medicine</th>
+                                          <th>Dosage</th>
+                                          <th>Frequency</th>
+                                          <th>Duration</th>
+                                          <th>Instructions</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {meds.map((med: any, idx: number) => (
+                                          <tr key={idx}>
+                                            <td style={{ fontWeight: 600 }}>{idx + 1}. {med.name}</td>
+                                            <td>{med.dosage || "—"}</td>
+                                            <td>{med.frequency || "—"}</td>
+                                            <td>{med.duration || "—"}</td>
+                                            <td style={{ fontSize: "0.78rem", color: "var(--text-secondary)", fontStyle: "italic" }}>{med.instructions || "Take with water"}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Notes */}
+                              {rx.notes && (
+                                <div style={{ background: "var(--background)", borderRadius: 8, padding: "0.75rem 1rem", borderLeft: "3px solid var(--primary)" }}>
+                                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>Doctor's Note</span>
+                                  <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.85rem", color: "var(--text-primary)" }}>{rx.notes}</p>
+                                </div>
+                              )}
+
+                              {/* Footer */}
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                                  <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>Appointment: <code style={{ fontSize: "0.72rem" }}>{rx.appointmentId}</code></span>
+                                  <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>Prescription: <code style={{ fontSize: "0.72rem" }}>{rx.id}</code></span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  onClick={() => loadPrescriptionPrint("", rx.appointmentId)}
+                                >
+                                  <i className="fa-solid fa-print"></i> Prescription Slip
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              </section>
-            )}
+                </section>
+              );
+            })()}
+
+
 
 
             {/* ==================== LAB SCREEN WORKSPACES ==================== */}
             {currentUser.role === "lab" && activePage === "dashboard" && (
               <section className="page-section">
-                <div className="panel">
-                  <div className="panel-header">
-                    <h3 className="panel-title"><i className="fa-solid fa-list-check"></i> Lab Testing Orders Queue</h3>
-                    <button 
-                      type="button" 
-                      className="btn btn-secondary btn-sm" 
-                      onClick={() => {
-                        setDirectUploadRole("lab");
-                        setDirectUploadAppId("");
-                        setDirectUploadTitle("");
-                        setDirectUploadType("blood-test");
-                        setDirectUploadFindings("");
-                        setDirectUploadNotes("");
-                        setIsDirectUploadOpen(true);
-                      }}
-                    >
-                      <i className="fa-solid fa-cloud-arrow-up"></i> Upload Direct Diagnostic Report
+                <div className="panel" style={{ maxWidth: 650, margin: "0 auto" }}>
+                  <div className="panel-header" style={{ borderBottom: "1px solid var(--border)", paddingBottom: "1rem", marginBottom: "1.5rem" }}>
+                    <h3 className="panel-title"><i className="fa-solid fa-cloud-arrow-up"></i> Pathology File Upload Center</h3>
+                  </div>
+                  <form onSubmit={handleLabDashboardUpload}>
+                    <div className="form-group">
+                      <label style={{ fontWeight: 600 }}>Appointment ID</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. APT-20260601-123"
+                        value={labDashAppId}
+                        onChange={(e) => {
+                          setLabDashAppId(e.target.value);
+                          // Try to pre-fill report title if appointment exists
+                          const app = appointments.find(a => a.id === e.target.value);
+                          if (app && !labDashTitle) {
+                            setLabDashTitle(`${app.chiefComplaint || "Diagnostic"} Report`);
+                          }
+                        }}
+                        required
+                      />
+                      <small style={{ display: "block", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
+                        Enter the patient's unique Appointment ID to link this diagnostic report.
+                      </small>
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ fontWeight: 600 }}>Report Title / Test Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Lipid Profile, Complete Blood Count"
+                        value={labDashTitle}
+                        onChange={(e) => setLabDashTitle(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ fontWeight: 600 }}>Diagnostic Modality / Type</label>
+                      <select
+                        value={labDashType}
+                        onChange={(e) => setLabDashType(e.target.value)}
+                      >
+                        <option value="blood-test">Blood Test</option>
+                        <option value="urine-test">Urine Test</option>
+                        <option value="x-ray">X-Ray Imaging</option>
+                        <option value="ct-scan">CT Scan</option>
+                        <option value="mri">MRI Scan</option>
+                        <option value="ecg">ECG Cardiogram</option>
+                        <option value="other">Other Diagnostic</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: "2rem" }}>
+                      <label style={{ fontWeight: 600 }}>Upload Supporting PDF Document</label>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => {
+                          if (e.target.files?.[0]) {
+                            setLabDashFileName(e.target.files[0].name);
+                            setLabDashFile(e.target.files[0]);
+                          }
+                        }}
+                        required
+                      />
+                      {labDashFileName && (
+                        <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "var(--primary)", fontWeight: 600 }}>
+                          <i className="fa-regular fa-file-pdf"></i> Selected: {labDashFileName}
+                        </div>
+                      )}
+                    </div>
+
+                    <button type="submit" className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+                      <i className="fa-solid fa-cloud-arrow-up"></i> Upload Document & Notify Doctor
                     </button>
-                  </div>
-                  <div className="table-wrapper">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Order Code</th>
-                          <th>Patient Name</th>
-                          <th>Doctor Ref</th>
-                          <th>Tests Requested</th>
-                          <th>Status</th>
-                          <th>Pathology Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {labOrders.map(order => {
-                          const pat = patients.find(p => p.id === order.patientId);
-                          return (
-                            <tr key={order.id}>
-                              <td><code>{order.id}</code></td>
-                              <td style={{ fontWeight: 600 }}>{pat?.name || "Patient"}</td>
-                              <td>Dr. Sarah Jenkins</td>
-                              <td>{JSON.parse(order.testsJson).map((t: any) => t.test_name).join(", ")}</td>
-                              <td><span className="badge ${order.status === 'completed' ? 'badge-success' : 'badge-warning'}">{order.status}</span></td>
-                              <td>
-                                {order.status === "lab-assigned" && (
-                                  <button className="btn btn-secondary btn-sm" onClick={() => {
-                                    setUploadLabOrderId(order.id);
-                                    setUploadReportTitle(JSON.parse(order.testsJson).map((t: any) => t.test_name).join(", ") + " Report");
-                                    setUploadFindings("");
-                                    setUploadNotes("");
-                                    setIsLabUploadOpen(true);
-                                  }}>
-                                    <i className="fa-solid fa-file-arrow-up"></i> Upload Report
-                                  </button>
-                                )}
-                                {order.status === "completed" && (
-                                  <span style={{ color: "var(--secondary)", fontWeight: 600 }}><i className="fa-solid fa-check-circle"></i> Uploaded</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {labOrders.length === 0 && (
-                          <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--text-secondary)" }}>No pending lab order requests in queue.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  </form>
                 </div>
               </section>
             )}
@@ -3799,24 +6067,176 @@ export default function MedLinkApp() {
               {(currentUser.role === "doctor" || currentUser.role === "assistant") && (
                 <div style={{ display: "flex", gap: "1.5rem", marginBottom: "1.25rem", alignItems: "center" }}>
                   <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontWeight: 600 }}>
-                    <input 
-                      type="checkbox" 
-                      checked={bookingIsBlock} 
-                      onChange={(e) => setBookingIsBlock(e.target.checked)} 
+                    <input
+                      type="checkbox"
+                      checked={bookingIsBlock}
+                      onChange={(e) => setBookingIsBlock(e.target.checked)}
                     />
                     Block this calendar slot (no patient)
                   </label>
                 </div>
               )}
               {(currentUser.role === "doctor" || currentUser.role === "assistant") && !bookingIsBlock && (
-                <div className="form-group">
-                  <label>Select Patient Profile</label>
-                  <select value={bookingPatientId} onChange={(e) => setBookingPatientId(e.target.value)} required>
-                    <option value="">-- Choose Patient --</option>
-                    {patients.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
-                    ))}
-                  </select>
+                <div className="form-group" style={{ border: "1px solid var(--border)", padding: "1rem", borderRadius: "8px", background: "var(--background)", marginBottom: "1.25rem" }}>
+                  <label style={{ fontWeight: 650, fontSize: "0.875rem", display: "block", marginBottom: "0.5rem" }}>
+                    Patient Selection
+                  </label>
+
+                  {bookingPatientId ? (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "var(--surface)", padding: "0.75rem 1rem", borderRadius: "6px", border: "1px solid var(--border)" }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>
+                          {(() => {
+                            if (bookingFamilyMemberId) {
+                              const p = patients.find(pat => pat.id === bookingPatientId);
+                              const fm = p?.familyMembers?.find(f => f.id === bookingFamilyMemberId);
+                              return fm ? `${fm.name} (${fm.relation} of ${p?.name})` : "Family Member";
+                            } else {
+                              const p = patients.find(pat => pat.id === bookingPatientId);
+                              return p ? p.name : bookingPatientId;
+                            }
+                          })()}
+                        </div>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                          ID: {bookingFamilyMemberId || bookingPatientId}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => {
+                          setBookingPatientId("");
+                          setBookingFamilyMemberId("");
+                          setBookingSearchVal("");
+                          setBookingSearchDone(false);
+                        }}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <input
+                          type="text"
+                          placeholder="Enter Patient ID or Phone number..."
+                          value={bookingSearchVal}
+                          onChange={(e) => setBookingSearchVal(e.target.value)}
+                          style={{ flex: 1, padding: "0.5rem", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-primary)" }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            if (bookingSearchVal.trim()) {
+                              setBookingSearchDone(true);
+                            } else {
+                              alert("Please enter a phone number or Patient ID to search.");
+                            }
+                          }}
+                        >
+                          Search
+                        </button>
+                      </div>
+
+                      {bookingSearchDone && (() => {
+                        const q = bookingSearchVal.trim().toLowerCase();
+                        const matches: any[] = [];
+
+                        patients.forEach(p => {
+                          if (p.id.toLowerCase() === q || p.primaryPhone === q) {
+                            matches.push({
+                              id: p.id,
+                              name: p.name,
+                              phone: p.primaryPhone,
+                              isFamilyMember: false,
+                              rawPatient: p
+                            });
+                          }
+                          p.familyMembers?.forEach(fm => {
+                            if (fm.id.toLowerCase() === q || p.primaryPhone === q) {
+                              matches.push({
+                                id: fm.id,
+                                name: fm.name,
+                                phone: p.primaryPhone,
+                                isFamilyMember: true,
+                                relation: fm.relation,
+                                parentName: p.name,
+                                parentId: p.id,
+                                rawPatient: p
+                              });
+                            }
+                          });
+                        });
+
+                        return (
+                          <div style={{ marginTop: "1rem" }}>
+                            {matches.length === 0 ? (
+                              <div style={{ padding: "0.75rem", background: "var(--surface)", border: "1px dashed var(--danger)", borderRadius: "6px", textAlign: "center" }}>
+                                <div style={{ fontSize: "0.85rem", color: "var(--danger)", fontWeight: 600, marginBottom: "0.5rem" }}>No patient found.</div>
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  style={{ display: "inline-flex", gap: "0.25rem", marginInline: "auto" }}
+                                  onClick={() => {
+                                    setIsBookAppOpen(false);
+                                    setIsAddPatientOpen(true);
+                                  }}
+                                >
+                                  <i className="fa-solid fa-user-plus"></i> Register as a New Patient
+                                </button>
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxHeight: "150px", overflowY: "auto", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem", background: "var(--surface)" }}>
+                                {matches.map(m => (
+                                  <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.35rem 0.5rem", borderBottom: "1px solid var(--border)" }}>
+                                    <div style={{ fontSize: "0.85rem", textAlign: "left" }}>
+                                      <div style={{ fontWeight: 650 }}>{m.name} {m.isFamilyMember && `(${m.relation} of ${m.parentName})`}</div>
+                                      <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                                        ID: {m.id} | Phone: {m.phone}
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      style={{ padding: "2px 8px", fontSize: "0.75rem" }}
+                                      onClick={() => {
+                                        if (m.isFamilyMember) {
+                                          setBookingPatientId(m.parentId);
+                                          setBookingFamilyMemberId(m.id);
+                                        } else {
+                                          setBookingPatientId(m.id);
+                                          setBookingFamilyMemberId("");
+                                        }
+                                      }}
+                                    >
+                                      Select
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {!bookingSearchDone && (
+                        <div style={{ marginTop: "0.75rem", textAlign: "center" }}>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            style={{ width: "100%", justifyContent: "center" }}
+                            onClick={() => {
+                              setIsBookAppOpen(false);
+                              setIsAddPatientOpen(true);
+                            }}
+                          >
+                            <i className="fa-solid fa-user-plus"></i> Register as a New Patient
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="form-row">
@@ -3849,11 +6269,11 @@ export default function MedLinkApp() {
 
               <div className="form-group">
                 <label>{bookingIsBlock ? "Reason for Block" : "Chief Complaint / Symptoms"}</label>
-                <textarea 
-                  rows={2} 
-                  placeholder={bookingIsBlock ? "e.g., Attending conference, surgery block..." : "Describe reasons for scheduling consultation..."} 
-                  value={bookingComplaint} 
-                  onChange={(e) => setBookingComplaint(e.target.value)} 
+                <textarea
+                  rows={2}
+                  placeholder={bookingIsBlock ? "e.g., Attending conference, surgery block..." : "Describe reasons for scheduling consultation..."}
+                  value={bookingComplaint}
+                  onChange={(e) => setBookingComplaint(e.target.value)}
                   required
                 ></textarea>
               </div>
@@ -3876,190 +6296,322 @@ export default function MedLinkApp() {
           </div>
           <form onSubmit={handleSoapSubmit}>
             <div className="modal-body">
-              
-              {/* Patient Vitals */}
-              <div className="panel" style={{ padding: "1rem", backgroundColor: "var(--background)", borderColor: "var(--border)" }}>
-                <h4 style={{ fontSize: "0.9rem", marginBottom: "0.75rem" }}><i className="fa-solid fa-heart-pulse"></i> Patient Vital Signs</h4>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "0.5rem" }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>BP (mmHg)</label><input type="text" value={soapBp} onChange={(e) => setSoapBp(e.target.value)} /></div>
-                  <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>Pulse (bpm)</label><input type="text" value={soapPulse} onChange={(e) => setSoapPulse(e.target.value)} /></div>
-                  <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>Temp (°F)</label><input type="text" value={soapTemp} onChange={(e) => setSoapTemp(e.target.value)} /></div>
-                  <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>SpO2 (%)</label><input type="text" value={soapSpo2} onChange={(e) => setSoapSpo2(e.target.value)} /></div>
-                  <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>Weight (kg)</label><input type="text" value={soapWeight} onChange={(e) => setSoapWeight(e.target.value)} /></div>
-                  <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>Height (cm)</label><input type="text" value={soapHeight} onChange={(e) => setSoapHeight(e.target.value)} /></div>
-                </div>
-              </div>
+              {(() => {
+                const soapApp = appointments.find(a => a.id === soapAppId);
+                const soapPatient = soapApp ? patients.find(p => p.id === soapApp.patientId) : null;
 
-              {/* SOAP Text areas */}
-              <div className="soap-box" style={{ marginTop: "1.5rem" }}>
-                <div className="consultation-form-section">
-                  <h4 style={{ fontSize: "0.85rem", color: "var(--primary)", marginBottom: "0.5rem" }}><i className="fa-solid fa-user-clock"></i> Subjective (Patient complaints)</h4>
-                  <textarea rows={3} value={soapSubjective} onChange={(e) => setSoapSubjective(e.target.value)}></textarea>
-                </div>
-                <div className="consultation-form-section">
-                  <h4 style={{ fontSize: "0.85rem", color: "var(--secondary)", marginBottom: "0.5rem" }}><i className="fa-solid fa-magnifying-glass-chart"></i> Objective (Observations)</h4>
-                  <textarea rows={3} value={soapObjective} onChange={(e) => setSoapObjective(e.target.value)}></textarea>
-                </div>
-              </div>
-
-              <div className="soap-box" style={{ marginTop: "1rem" }}>
-                <div className="consultation-form-section">
-                  <h4 style={{ fontSize: "0.85rem", color: "var(--warning)", marginBottom: "0.5rem" }}><i className="fa-solid fa-clipboard-question"></i> Assessment (Diagnosis)</h4>
-                  <input type="text" placeholder="e.g. Essential Hypertension (ICD-10 I10)" value={soapAssessmentIcd} onChange={(e) => setSoapAssessmentIcd(e.target.value)} style={{ marginBottom: "0.5rem" }} />
-                  <textarea rows={2} value={soapAssessment} onChange={(e) => setSoapAssessment(e.target.value)}></textarea>
-                </div>
-                <div className="consultation-form-section">
-                  <h4 style={{ fontSize: "0.85rem", color: "var(--danger)", marginBottom: "0.5rem" }}><i className="fa-solid fa-prescription-bottle-medical"></i> Treatment Plan & Follow-up</h4>
-                  <textarea rows={2} value={soapPlan} onChange={(e) => setSoapPlan(e.target.value)}></textarea>
-                  <div className="form-group" style={{ marginTop: "0.5rem", marginBottom: 0 }}>
-                    <label style={{ fontSize: "0.75rem" }}>Follow-up Visit Date</label>
-                    <input type="date" value={soapFollowUp} onChange={(e) => setSoapFollowUp(e.target.value)} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Specialist Referral Section */}
-              <div className="panel" style={{ padding: "1.25rem", marginTop: "1.5rem", border: "1px dashed var(--primary)" }}>
-                <h4 style={{ fontSize: "0.9rem", color: "var(--primary)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <input 
-                    type="checkbox" 
-                    id="soap-refer-enable" 
-                    checked={soapReferEnabled} 
-                    onChange={(e) => {
-                      setSoapReferEnabled(e.target.checked);
-                      if (e.target.checked && doctors.length > 0) {
-                        const otherDocs = doctors.filter(d => d.id !== currentUser?.id && d.isApproved);
-                        if (otherDocs.length > 0 && !soapReferDoctorId) {
-                          setSoapReferDoctorId(otherDocs[0].id);
-                        }
-                      }
-                    }} 
-                  />
-                  <label htmlFor="soap-refer-enable" style={{ cursor: "pointer", margin: 0, fontWeight: 600 }}>
-                    <i className="fa-solid fa-share-nodes"></i> Refer Patient to a Specialist (Optional)
-                  </label>
-                </h4>
+                const alerts: { type: "danger" | "warning" | "success"; text: string; title: string; icon: string }[] = [];
                 
-                {soapReferEnabled && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "1rem" }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Select Specialist Doctor</label>
-                      <select 
-                        value={soapReferDoctorId} 
-                        onChange={(e) => setSoapReferDoctorId(e.target.value)}
-                        required
-                      >
-                        <option value="">-- Choose Specialist --</option>
-                        {doctors.filter(d => d.id !== currentUser?.id && d.isApproved).map(d => (
-                          <option key={d.id} value={d.id}>{d.name} ({d.speciality})</option>
-                        ))}
-                      </select>
-                    </div>
+                // Vitals alerts
+                let isBpElevated = false;
+                if (soapBp) {
+                  const parts = soapBp.split("/");
+                  if (parts.length === 2) {
+                    const sys = parseInt(parts[0].trim(), 10);
+                    const dia = parseInt(parts[1].trim(), 10);
+                    if (!isNaN(sys) && sys > 130) isBpElevated = true;
+                    if (!isNaN(dia) && dia > 80) isBpElevated = true;
+                  }
+                }
+                if (isBpElevated) {
+                  alerts.push({
+                    type: "danger",
+                    title: "Hypertension Alert",
+                    icon: "fa-solid fa-heart-crack",
+                    text: `Recorded Blood Pressure (${soapBp} mmHg) exceeds 130/80 mmHg. Exercise caution when administering local anesthetics or vasoactive agents.`
+                  });
+                }
 
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Urgency Level</label>
-                      <select 
-                        value={soapReferUrgency} 
-                        onChange={(e) => setSoapReferUrgency(e.target.value)}
-                      >
-                        <option value="routine">Routine</option>
-                        <option value="urgent">Urgent</option>
-                        <option value="emergency">Emergency</option>
-                      </select>
-                    </div>
+                if (soapSpo2) {
+                  const spo2Num = parseInt(soapSpo2.trim(), 10);
+                  if (!isNaN(spo2Num) && spo2Num < 95) {
+                    alerts.push({
+                      type: "danger",
+                      title: "Hypoxia Warning",
+                      icon: "fa-solid fa-lungs",
+                      text: `Patient's Oxygen Saturation (${soapSpo2}%) is low. Ensure proper oxygenation before starting procedures.`
+                    });
+                  }
+                }
 
-                    <div className="form-group" style={{ gridColumn: "span 2", marginBottom: 0 }}>
-                      <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Reason for Referral</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g., Clinical evaluation for cardiac murmurs" 
-                        value={soapReferReason} 
-                        onChange={(e) => setSoapReferReason(e.target.value)} 
-                        required={soapReferEnabled}
-                      />
-                    </div>
+                // Allergy checks
+                if (soapPatient && soapPatient.allergies) {
+                  const allergiesLower = soapPatient.allergies.toLowerCase();
+                  if (allergiesLower.includes("penicillin")) {
+                    const conflicts = soapPrescribedMeds.filter(m => {
+                      const name = m.name.toLowerCase();
+                      return name.includes("amoxicillin") || name.includes("penicillin") || name.includes("ampicillin") || name.includes("augmentin");
+                    });
+                    if (conflicts.length > 0) {
+                      alerts.push({
+                        type: "danger",
+                        title: "Allergy Conflict",
+                        icon: "fa-solid fa-triangle-exclamation",
+                        text: `Severe Drug-Allergy Conflict: Patient is allergic to Penicillin. Prescribing ${conflicts.map(c => c.name).join(", ")} poses a high risk of anaphylaxis. Consider alternatives like Clindamycin.`
+                      });
+                    }
+                  }
+                }
 
-                    <div className="form-group" style={{ gridColumn: "span 2", marginBottom: 0 }}>
-                      <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Additional Clinical Notes (Optional)</label>
-                      <textarea 
-                        rows={2} 
-                        placeholder="Details of symptoms, clinical history, or specific questions for the specialist..." 
-                        value={soapReferNotes} 
-                        onChange={(e) => setSoapReferNotes(e.target.value)}
-                      ></textarea>
-                    </div>
-                  </div>
-                )}
-              </div>
+                // Caries suggestions
+                if (soapPatient) {
+                  const patientOdontogram = odontogramData[soapPatient.id] || {};
+                  const decayedTeeth: number[] = [];
+                  Object.entries(patientOdontogram).forEach(([toothNum, status]) => {
+                    if (status === "decayed") {
+                      decayedTeeth.push(Number(toothNum));
+                    }
+                  });
+                  if (decayedTeeth.length > 0) {
+                    alerts.push({
+                      type: "warning",
+                      title: "Caries Suggestion",
+                      icon: "fa-solid fa-tooth",
+                      text: `Active decay logged on Tooth #${decayedTeeth.join(", #")}. Suggest Root Canal Treatment or Composite Filling, and updating treatment plan.`
+                    });
+                  }
+                }
 
-              {/* Medicines & Labs Selector Grid */}
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem", marginTop: "1.5rem" }}>
-                
-                {/* Prescription list creator */}
-                <div className="panel" style={{ padding: "1rem" }}>
-                  <h4 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}><i className="fa-solid fa-pills"></i> Write Prescription Medicines</h4>
-                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                    <select value={soapSelectedMedId} onChange={(e) => setSoapSelectedMedId(e.target.value)} style={{ width: "70%" }}>
-                      {medicines.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.category})</option>
-                      ))}
-                    </select>
-                    <button type="button" className="btn btn-outline btn-sm" onClick={addSoapMedicineRow}>
-                      <i className="fa-solid fa-plus"></i> Add
-                    </button>
-                  </div>
-                  <div className="table-wrapper">
-                    <table style={{ fontSize: "0.75rem" }}>
-                      <thead>
-                        <tr>
-                          <th>Medicine</th>
-                          <th>Dosage</th>
-                          <th>Frequency</th>
-                          <th>Duration</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {soapPrescribedMeds.map((med, idx) => (
-                          <tr key={idx}>
-                            <td style={{ fontWeight: 600 }}>{med.name}</td>
-                            <td><input type="text" value={med.dosage} onChange={(e) => updateSoapMedField(idx, "dosage", e.target.value)} style={{ padding: 4 }} /></td>
-                            <td>
-                              <select value={med.frequency} onChange={(e) => updateSoapMedField(idx, "frequency", e.target.value)} style={{ padding: 4 }}>
-                                <option value="Once daily (morning)">Once daily (morning)</option>
-                                <option value="Once daily (night)">Once daily (night)</option>
-                                <option value="Twice daily (1-0-1)">Twice daily (1-0-1)</option>
-                                <option value="Thrice daily (1-1-1)">Thrice daily (1-1-1)</option>
-                              </select>
-                            </td>
-                            <td><input type="text" value={med.duration} onChange={(e) => updateSoapMedField(idx, "duration", e.target.value)} style={{ padding: 4, width: 70 }} /></td>
-                            <td>
-                              <button type="button" className="btn btn-danger btn-sm" style={{ padding: "0.15rem 0.35rem" }} onClick={() => removeSoapMedicineRow(idx)}>
-                                &times;
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                if (alerts.length === 0) {
+                  alerts.push({
+                    type: "success",
+                    title: "Clinical Checks Passed",
+                    icon: "fa-solid fa-shield-halved",
+                    text: "No vitals anomalies or drug-allergy interactions detected for this consultation."
+                  });
+                }
 
-                {/* Lab orders checklist */}
-                <div className="panel" style={{ padding: "1rem" }}>
-                  <h4 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}><i className="fa-solid fa-microscope"></i> Lab Diagnostics Tests</h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                    {dbTestsCatalog.map(test => (
-                      <div key={test.test_code} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
-                        <input type="checkbox" id={`soap-test-${test.test_code}`} checked={soapTestsChecked[test.test_code] || false} onChange={(e) => setSoapTestsChecked({ ...soapTestsChecked, [test.test_code]: e.target.checked })} />
-                        <label htmlFor={`soap-test-${test.test_code}`}>{test.name}</label>
+                return (
+                  <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "flex-start" }}>
+                    {/* Left Column: Input Form (Takes up remaining space) */}
+                    <div style={{ flex: "1 1 500px", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                      
+                      {/* Clinic / Hospital Selector */}
+                      <div className="panel" style={{ padding: "1rem", backgroundColor: "var(--background)", borderColor: "var(--border)", marginBottom: 0 }}>
+                        <h4 style={{ fontSize: "0.9rem", marginBottom: "0.75rem" }}><i className="fa-solid fa-hospital"></i> Consulting From</h4>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <select
+                            value={soapClinicId}
+                            onChange={(e) => setSoapClinicId(e.target.value)}
+                            style={{ width: "100%", padding: "0.5rem", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-primary)", fontSize: "0.9rem" }}
+                          >
+                            <option value="">{(() => { const d = doctors.find(doc => doc.id === currentUser?.id); return d ? `${d.clinicName} (Primary)` : "Primary Clinic"; })()}</option>
+                            {doctorClinics.map((c: any) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
-                    ))}
+
+                      {/* Patient Vitals */}
+                      <div className="panel" style={{ padding: "1rem", backgroundColor: "var(--background)", borderColor: "var(--border)", marginBottom: 0 }}>
+                        <h4 style={{ fontSize: "0.9rem", marginBottom: "0.75rem" }}><i className="fa-solid fa-heart-pulse"></i> Patient Vital Signs</h4>
+                        <div className="soap-vitals-grid">
+                          <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>BP (mmHg)</label><input type="text" value={soapBp} onChange={(e) => setSoapBp(e.target.value)} /></div>
+                          <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>Pulse (bpm)</label><input type="text" value={soapPulse} onChange={(e) => setSoapPulse(e.target.value)} /></div>
+                          <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>Temp (°F)</label><input type="text" value={soapTemp} onChange={(e) => setSoapTemp(e.target.value)} /></div>
+                          <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>SpO2 (%)</label><input type="text" value={soapSpo2} onChange={(e) => setSoapSpo2(e.target.value)} /></div>
+                          <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>Weight (kg)</label><input type="text" value={soapWeight} onChange={(e) => setSoapWeight(e.target.value)} /></div>
+                          <div className="form-group" style={{ marginBottom: 0 }}><label style={{ fontSize: "0.75rem" }}>Height (cm)</label><input type="text" value={soapHeight} onChange={(e) => setSoapHeight(e.target.value)} /></div>
+                        </div>
+                      </div>
+
+                      {/* SOAP Text areas */}
+                      <div className="soap-box" style={{ marginTop: 0 }}>
+                        <div className="consultation-form-section">
+                          <h4 style={{ fontSize: "0.85rem", color: "var(--primary)", marginBottom: "0.5rem" }}><i className="fa-solid fa-user-clock"></i> Subjective (Patient complaints)</h4>
+                          <textarea rows={3} value={soapSubjective} onChange={(e) => setSoapSubjective(e.target.value)}></textarea>
+                        </div>
+                        <div className="consultation-form-section">
+                          <h4 style={{ fontSize: "0.85rem", color: "var(--secondary)", marginBottom: "0.5rem" }}><i className="fa-solid fa-magnifying-glass-chart"></i> Objective (Observations)</h4>
+                          <textarea rows={3} value={soapObjective} onChange={(e) => setSoapObjective(e.target.value)}></textarea>
+                        </div>
+                      </div>
+
+                      <div className="soap-box" style={{ marginTop: 0 }}>
+                        <div className="consultation-form-section">
+                          <h4 style={{ fontSize: "0.85rem", color: "var(--warning)", marginBottom: "0.5rem" }}><i className="fa-solid fa-clipboard-question"></i> Assessment (Diagnosis)</h4>
+                          <input type="text" placeholder="e.g. Essential Hypertension (ICD-10 I10)" value={soapAssessmentIcd} onChange={(e) => setSoapAssessmentIcd(e.target.value)} style={{ marginBottom: "0.5rem" }} />
+                          <textarea rows={2} value={soapAssessment} onChange={(e) => setSoapAssessment(e.target.value)}></textarea>
+                        </div>
+                        <div className="consultation-form-section">
+                          <h4 style={{ fontSize: "0.85rem", color: "var(--danger)", marginBottom: "0.5rem" }}><i className="fa-solid fa-prescription-bottle-medical"></i> Treatment Plan & Follow-up</h4>
+                          <textarea rows={2} value={soapPlan} onChange={(e) => setSoapPlan(e.target.value)}></textarea>
+                          <div className="form-group" style={{ marginTop: "0.5rem", marginBottom: 0 }}>
+                            <label style={{ fontSize: "0.75rem" }}>Follow-up Visit Date</label>
+                            <input type="date" value={soapFollowUp} onChange={(e) => setSoapFollowUp(e.target.value)} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Specialist Referral Section */}
+                      <div className="panel" style={{ padding: "1.25rem", marginTop: 0, border: "1px dashed var(--primary)", marginBottom: 0 }}>
+                        <h4 style={{ fontSize: "0.9rem", color: "var(--primary)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <input
+                            type="checkbox"
+                            id="soap-refer-enable"
+                            checked={soapReferEnabled}
+                            onChange={(e) => {
+                              setSoapReferEnabled(e.target.checked);
+                              if (e.target.checked && doctors.length > 0) {
+                                const otherDocs = doctors.filter(d => d.id !== currentUser?.id && d.isApproved);
+                                if (otherDocs.length > 0 && !soapReferDoctorId) {
+                                  setSoapReferDoctorId(otherDocs[0].id);
+                                }
+                              }
+                            }}
+                          />
+                          <label htmlFor="soap-refer-enable" style={{ cursor: "pointer", margin: 0, fontWeight: 600 }}>
+                            <i className="fa-solid fa-share-nodes"></i> Refer Patient to a Specialist (Optional)
+                          </label>
+                        </h4>
+
+                        {soapReferEnabled && (
+                          <div className="soap-referrals-grid">
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Select Specialist Doctor</label>
+                              <select
+                                value={soapReferDoctorId}
+                                onChange={(e) => setSoapReferDoctorId(e.target.value)}
+                                required
+                              >
+                                <option value="">-- Choose Specialist --</option>
+                                {doctors.filter(d => d.id !== currentUser?.id && d.isApproved).map(d => (
+                                  <option key={d.id} value={d.id}>{d.name} ({d.speciality})</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Urgency Level</label>
+                              <select
+                                value={soapReferUrgency}
+                                onChange={(e) => setSoapReferUrgency(e.target.value)}
+                              >
+                                <option value="routine">Routine</option>
+                                <option value="urgent">Urgent</option>
+                                <option value="emergency">Emergency</option>
+                              </select>
+                            </div>
+
+                            <div className="form-group grid-span-2" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Reason for Referral</label>
+                              <input
+                                type="text"
+                                placeholder="e.g., Clinical evaluation for cardiac murmurs"
+                                value={soapReferReason}
+                                onChange={(e) => setSoapReferReason(e.target.value)}
+                                required={soapReferEnabled}
+                              />
+                            </div>
+
+                            <div className="form-group grid-span-2" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: "0.8rem", fontWeight: 600 }}>Additional Clinical Notes (Optional)</label>
+                              <textarea
+                                rows={2}
+                                placeholder="Details of symptoms, clinical history, or specific questions for the specialist..."
+                                value={soapReferNotes}
+                                onChange={(e) => setSoapReferNotes(e.target.value)}
+                              ></textarea>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Medicines & Labs Selector Grid */}
+                      <div className="soap-split" style={{ marginTop: 0 }}>
+
+                        {/* Prescription list creator */}
+                        <div className="panel" style={{ padding: "1rem", marginBottom: 0 }}>
+                          <h4 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}><i className="fa-solid fa-pills"></i> Write Prescription Medicines</h4>
+                          <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                            <select value={soapSelectedMedId} onChange={(e) => setSoapSelectedMedId(e.target.value)} style={{ width: "70%" }}>
+                              {medicines.map(m => (
+                                <option key={m.id} value={m.id}>{m.name} ({m.category})</option>
+                              ))}
+                            </select>
+                            <button type="button" className="btn btn-outline btn-sm" onClick={addSoapMedicineRow}>
+                              <i className="fa-solid fa-plus"></i> Add
+                            </button>
+                          </div>
+                          <div className="table-wrapper">
+                            <table style={{ fontSize: "0.75rem" }}>
+                              <thead>
+                                <tr>
+                                  <th>Medicine</th>
+                                  <th>Dosage</th>
+                                  <th>Frequency</th>
+                                  <th>Duration</th>
+                                  <th></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {soapPrescribedMeds.map((med, idx) => (
+                                  <tr key={idx}>
+                                    <td style={{ fontWeight: 600 }}>{med.name}</td>
+                                    <td><input type="text" value={med.dosage} onChange={(e) => updateSoapMedField(idx, "dosage", e.target.value)} style={{ padding: 4 }} /></td>
+                                    <td>
+                                      <select value={med.frequency} onChange={(e) => updateSoapMedField(idx, "frequency", e.target.value)} style={{ padding: 4 }}>
+                                        <option value="Once daily (morning)">Once daily (morning)</option>
+                                        <option value="Once daily (night)">Once daily (night)</option>
+                                        <option value="Twice daily (1-0-1)">Twice daily (1-0-1)</option>
+                                        <option value="Thrice daily (1-1-1)">Thrice daily (1-1-1)</option>
+                                      </select>
+                                    </td>
+                                    <td><input type="text" value={med.duration} onChange={(e) => updateSoapMedField(idx, "duration", e.target.value)} style={{ padding: 4, width: 70 }} /></td>
+                                    <td>
+                                      <button type="button" className="btn btn-danger btn-sm" style={{ padding: "0.15rem 0.35rem" }} onClick={() => removeSoapMedicineRow(idx)}>
+                                        &times;
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Lab orders checklist */}
+                        <div className="panel" style={{ padding: "1rem", marginBottom: 0 }}>
+                          <h4 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}><i className="fa-solid fa-microscope"></i> Lab Diagnostics Tests</h4>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                            {dbTestsCatalog.map(test => (
+                              <div key={test.test_code} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>
+                                <input type="checkbox" id={`soap-test-${test.test_code}`} checked={soapTestsChecked[test.test_code] || false} onChange={(e) => setSoapTestsChecked({ ...soapTestsChecked, [test.test_code]: e.target.checked })} />
+                                <label htmlFor={`soap-test-${test.test_code}`}>{test.name}</label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                    {/* Right Column: AI Clinical Copilot */}
+                    <div style={{ flex: "0 0 300px", minWidth: "260px", display: "flex", flexDirection: "column", gap: "1rem", position: "sticky", top: "10px" }}>
+                      <div className="ai-copilot-container">
+                        <h4 className="ai-copilot-title">
+                          <i className="fa-brain fa-solid"></i> AI Clinical Copilot
+                        </h4>
+                        <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginBottom: "1rem" }}>
+                          Scanning patient chart, vitals, allergies, and prescriptions in real-time.
+                        </p>
+                        <div className="ai-copilot-alert-box">
+                          {alerts.map((alert, idx) => (
+                            <div key={idx} className={`ai-alert-bubble ${alert.type}`}>
+                              <div style={{ fontWeight: 700, fontSize: "0.85rem", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                                <i className={alert.icon}></i> {alert.title}
+                              </div>
+                              <div>{alert.text}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-
-              </div>
-
+                );
+              })()}
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-outline" onClick={() => setIsSoapOpen(false)}>Discard</button>
@@ -4086,13 +6638,16 @@ export default function MedLinkApp() {
                 <div className="prescription-header">
                   <div className="pres-clinic-logo">
                     <i className="fa-solid fa-house-chimney-medical"></i>
-                    <span>{previewRx.doctor?.clinicName || "Clinic Center"}</span>
+                    <span>{previewRx.clinic?.name || previewRx.doctor?.clinicName || "Clinic Center"}</span>
                   </div>
                   <div className="pres-doc-info">
                     <h2>{previewRx.doctor?.name}</h2>
                     <p><strong>{previewRx.doctor?.qualifications}</strong></p>
                     <p>Reg No: {previewRx.doctor?.registrationNo}</p>
-                    <p style={{ fontSize: "0.75rem" }}>{previewRx.doctor?.clinicAddress}</p>
+                    <p style={{ fontSize: "0.75rem" }}>{previewRx.clinic?.address || previewRx.doctor?.clinicAddress}</p>
+                    {previewRx.clinic?.phone && (
+                      <p style={{ fontSize: "0.75rem" }}><i className="fa-solid fa-phone"></i> {previewRx.clinic.phone}</p>
+                    )}
                   </div>
                 </div>
 
@@ -4108,6 +6663,10 @@ export default function MedLinkApp() {
                   <div className="pres-meta-item">
                     <strong>Prescription ID</strong>
                     <code>{previewRx.rx.id}</code>
+                  </div>
+                  <div className="pres-meta-item">
+                    <strong>Appointment ID</strong>
+                    <code>{previewRx.rx.appointmentId}</code>
                   </div>
                   <div className="pres-meta-item">
                     <strong>Issued Date</strong>
@@ -4132,28 +6691,30 @@ export default function MedLinkApp() {
 
                 <div className="pres-rx-section">
                   <div className="pres-rx-symbol">R<sub>x</sub></div>
-                  <table className="pres-table">
-                    <thead>
-                      <tr>
-                        <th>Medicine Details</th>
-                        <th>Dosage</th>
-                        <th>Frequency</th>
-                        <th>Duration</th>
-                        <th>Instructions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {JSON.parse(previewRx.rx.medicinesJson).map((med: any, idx: number) => (
-                        <tr key={idx}>
-                          <td style={{ fontWeight: 600 }}>{idx + 1}. {med.name}</td>
-                          <td>{med.dosage}</td>
-                          <td>{med.frequency}</td>
-                          <td>{med.duration}</td>
-                          <td><span style={{ fontSize: "0.75rem", fontStyle: "italic", color: "var(--text-secondary)" }}>{med.instructions || "Take with water"}</span></td>
+                  <div className="table-wrapper">
+                    <table className="pres-table">
+                      <thead>
+                        <tr>
+                          <th>Medicine Details</th>
+                          <th>Dosage</th>
+                          <th>Frequency</th>
+                          <th>Duration</th>
+                          <th>Instructions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {JSON.parse(previewRx.rx.medicinesJson).map((med: any, idx: number) => (
+                          <tr key={idx}>
+                            <td style={{ fontWeight: 600 }}>{idx + 1}. {med.name}</td>
+                            <td>{med.dosage}</td>
+                            <td>{med.frequency}</td>
+                            <td>{med.duration}</td>
+                            <td><span style={{ fontSize: "0.75rem", fontStyle: "italic", color: "var(--text-secondary)" }}>{med.instructions || "Take with water"}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
                 {/* Diagnostics ordered section */}
@@ -4180,13 +6741,24 @@ export default function MedLinkApp() {
 
                 <div className="pres-sig-footer">
                   <div>
-                    <p>MedLink Pro Digital Signature Slip</p>
+                    <p>HealOne 360 Digital Signature Slip</p>
                     <p style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>ID Hash: SHA-{previewRx.rx.id.slice(-6)}</p>
                   </div>
                   <div className="pres-signature-line">
-                    <div className="line"></div>
+                    {previewRx.doctor?.signatureUrl ? (
+                      <div style={{ display: "flex", justifyContent: "center", marginBottom: "5px" }}>
+                        <img 
+                          src={previewRx.doctor.signatureUrl} 
+                          alt="Doctor Signature" 
+                          style={{ maxHeight: "55px", maxWidth: "160px", objectFit: "contain" }} 
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ height: "60px" }}></div>
+                    )}
+                    <div className="line" style={{ margin: "0 auto 0.25rem auto" }}></div>
                     <p>{previewRx.doctor?.name}</p>
-                    <p style={{ fontSize: "0.75rem" }}>Attending Doctor</p>
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Attending Doctor</p>
                   </div>
                 </div>
               </div>
@@ -4219,15 +6791,15 @@ export default function MedLinkApp() {
               </div>
               <div className="form-group">
                 <label>Upload Clinical Report (PDF)</label>
-                <input 
-                  type="file" 
-                  accept=".pdf" 
+                <input
+                  type="file"
+                  accept=".pdf"
                   onChange={(e) => {
                     if (e.target.files?.[0]) {
                       setUploadFileName(e.target.files[0].name);
                     }
-                  }} 
-                  required 
+                  }}
+                  required
                 />
                 {uploadFileName && (
                   <div style={{ marginTop: "0.25rem", fontSize: "0.8rem", color: "var(--primary)", fontWeight: 600 }}>
@@ -4256,15 +6828,15 @@ export default function MedLinkApp() {
             <div className="modal-body">
               <div className="form-group">
                 <label>Select Associated Consultation Appointment</label>
-                <select 
-                  value={directUploadAppId} 
+                <select
+                  value={directUploadAppId}
                   onChange={(e) => {
                     setDirectUploadAppId(e.target.value);
                     const app = appointments.find(a => a.id === e.target.value);
                     if (app && !directUploadTitle) {
                       setDirectUploadTitle(`${app.chiefComplaint || "Diagnostic"} Report`);
                     }
-                  }} 
+                  }}
                   required
                 >
                   <option value="">-- Choose Appointment --</option>
@@ -4293,19 +6865,19 @@ export default function MedLinkApp() {
 
               <div className="form-group">
                 <label>Report Title</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Chest X-Ray PA View, Lipid Panel" 
-                  value={directUploadTitle} 
-                  onChange={(e) => setDirectUploadTitle(e.target.value)} 
-                  required 
+                <input
+                  type="text"
+                  placeholder="e.g. Chest X-Ray PA View, Lipid Panel"
+                  value={directUploadTitle}
+                  onChange={(e) => setDirectUploadTitle(e.target.value)}
+                  required
                 />
               </div>
 
               <div className="form-group">
                 <label>Diagnostic Modality / Type</label>
-                <select 
-                  value={directUploadType} 
+                <select
+                  value={directUploadType}
                   onChange={(e) => setDirectUploadType(e.target.value)}
                 >
                   <option value="blood-test">Blood Test</option>
@@ -4319,36 +6891,16 @@ export default function MedLinkApp() {
               </div>
 
               <div className="form-group">
-                <label>Diagnostic Findings & Observations</label>
-                <textarea 
-                  rows={4} 
-                  placeholder="Enter pathology values, imaging observations, or diagnostic reports..." 
-                  value={directUploadFindings} 
-                  onChange={(e) => setDirectUploadFindings(e.target.value)} 
-                  required
-                ></textarea>
-              </div>
-
-              <div className="form-group">
-                <label>Additional Clinical Notes / Interpretations (Optional)</label>
-                <textarea 
-                  rows={2} 
-                  placeholder="Pathologist or radiologist notes..." 
-                  value={directUploadNotes} 
-                  onChange={(e) => setDirectUploadNotes(e.target.value)}
-                ></textarea>
-              </div>
-
-              <div className="form-group">
                 <label>Upload Clinical/Imaging PDF Report</label>
-                <input 
-                  type="file" 
-                  accept=".pdf" 
+                <input
+                  type="file"
+                  accept=".pdf"
                   onChange={(e) => {
                     if (e.target.files?.[0]) {
                       setDirectUploadFileName(e.target.files[0].name);
+                      setDirectUploadFile(e.target.files[0]);
                     }
-                  }} 
+                  }}
                   required
                 />
                 {directUploadFileName && (
@@ -4406,10 +6958,21 @@ export default function MedLinkApp() {
                         <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: "0.25rem 0 0 0" }}>{rep.notes}</p>
                       </div>
                     )}
-                    <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem", display: "flex", justifyContent: "flex-end" }}>
-                      <button 
-                        type="button" 
-                        className="btn btn-outline btn-sm" 
+                    <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem", display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
+                      {rep.fileUrl && (
+                        <a
+                          href={rep.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          download={rep.fileName || "report.pdf"}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          <i className="fa-solid fa-download"></i> Download Attached PDF
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
                         onClick={() => {
                           setViewPdfReport(rep);
                           setIsPdfModalOpen(true);
@@ -4430,189 +6993,107 @@ export default function MedLinkApp() {
       </div>
 
 
-      {/* ==================== PHARMACY CART SHOPPING DIALOG ==================== */}
-      <div className={`modal-backdrop ${isCartOpen ? "active" : ""}`}>
-        <div className="modal-container">
-          <div className="modal-header">
-            <h3>Shopping Basket - Online Pharmacy</h3>
-            <button className="modal-close" onClick={() => setIsCartOpen(false)}>&times;</button>
-          </div>
-          <form onSubmit={handleCheckout}>
-            <div className="modal-body">
-              <div className="table-wrapper" style={{ marginBottom: "1.5rem" }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Medicine</th>
-                      <th>Price</th>
-                      <th>Qty</th>
-                      <th>Subtotal</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cartItems.map((item, idx) => (
-                      <tr key={idx}>
-                        <td><strong>{item.name}</strong></td>
-                        <td>₹{item.price}</td>
-                        <td>
-                          <input type="number" min={1} value={item.qty} onChange={(e) => {
-                            const val = parseInt(e.target.value) || 1;
-                            setCartItems(cartItems.map(i => i.medicine_id === item.medicine_id ? { ...i, qty: val } : i));
-                          }} style={{ width: 60, padding: 4 }} />
-                        </td>
-                        <td>₹{item.price * item.qty}</td>
-                        <td>
-                          <button type="button" className="btn btn-danger btn-sm" style={{ padding: "0.15rem 0.35rem" }} onClick={() => setCartItems(cartItems.filter(i => i.medicine_id !== item.medicine_id))}>
-                            &times;
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="form-group">
-                <label>Delivery Address</label>
-                <textarea rows={2} value={checkoutAddress} onChange={(e) => setCheckoutAddress(e.target.value)} required></textarea>
-              </div>
-
-              <div className="form-group">
-                <label>Link Prescriptions Slip (Optional)</label>
-                <select value={checkoutRxId} onChange={(e) => setCheckoutRxId(e.target.value)}>
-                  <option value="">No prescription required (OTC drugs only)</option>
-                  {appointments.filter(a => a.patientId === currentUser.id && a.status === "completed").map(app => (
-                    <option key={app.id} value={generateId('RX')}>Consultation prescription dated {formatDate(app.appointmentDate)}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="modal-footer" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>Total:</span>
-                <span style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--secondary)", marginLeft: "0.5rem" }}>
-                  ₹{cartItems.reduce((sum, item) => sum + (item.price * item.qty), 0)}
-                </span>
-              </div>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <button type="button" className="btn btn-outline" onClick={() => setIsCartOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-secondary">Place Order (COD)</button>
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
-
       {/* ==================== SIMULATED CLINICAL PDF REPORT VIEWER DIALOG ==================== */}
       <div id="clinical-report-preview-modal" className={`modal-backdrop ${isPdfModalOpen ? "active" : ""}`}>
-        <div className="modal-container" style={{ maxWidth: 850, backgroundColor: "#eaeaea" }}>
+        <div className="modal-container" style={{ maxWidth: 900, backgroundColor: "var(--surface)" }}>
           <div className="modal-header">
-            <h3>Clinical Report PDF Viewer</h3>
-            <div>
-              <button className="btn btn-secondary btn-sm" onClick={() => window.print()}><i className="fa-solid fa-print"></i> Print Report</button>
-              <button className="modal-close" style={{ display: "inline-flex", marginLeft: "1rem" }} onClick={() => setIsPdfModalOpen(false)}>&times;</button>
+            <h3><i className="fa-regular fa-file-pdf" style={{ color: "var(--danger)" }}></i> {viewPdfReport?.reportTitle || "Clinical Report Viewer"}</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              {viewPdfReport && reportBlobUrls[viewPdfReport.id] && (
+                <a
+                  href={reportBlobUrls[viewPdfReport.id]}
+                  download={viewPdfReport.fileName || "report.pdf"}
+                  className="btn btn-primary btn-sm"
+                  style={{ color: "white" }}
+                >
+                  <i className="fa-solid fa-download"></i> Download PDF
+                </a>
+              )}
+              <button className="btn btn-secondary btn-sm" onClick={() => window.print()}><i className="fa-solid fa-print"></i> Print</button>
+              <button className="modal-close" style={{ display: "inline-flex", marginLeft: "0.5rem" }} onClick={() => setIsPdfModalOpen(false)}>&times;</button>
             </div>
           </div>
-          <div className="modal-body" style={{ padding: "1.5rem 0" }}>
+          <div className="modal-body" style={{ padding: 0 }}>
             {viewPdfReport && (
-              <div className="clinical-report-pdf" id="clinical-report-pdf-print">
-                <div className="clinical-report-header">
-                  <div className="report-clinic-logo">
-                    <i className="fa-solid fa-house-chimney-medical"></i>
-                    <span>
-                      {viewPdfReport.uploadedBy === "LAB-00001" 
-                        ? "Apex Diagnostics Center" 
-                        : (viewPdfReport.uploadedBy === "LAB-00002" 
-                          ? "Metro Pathology Labs" 
-                          : `Attending Doctor Upload (${viewPdfReport.uploadedBy})`)}
-                    </span>
+              <>
+                {/* If we have a blob URL from this session, render the real PDF */}
+                {reportBlobUrls[viewPdfReport.id] ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                    <iframe
+                      src={reportBlobUrls[viewPdfReport.id]}
+                      style={{ width: "100%", height: "70vh", border: "none", borderRadius: "0 0 12px 12px", background: "#f4f4f4" }}
+                      title={viewPdfReport.reportTitle || "Lab Report"}
+                    />
+                    <div style={{ padding: "1rem 1.5rem", borderTop: "1px solid var(--border)", display: "flex", gap: "2rem", fontSize: "0.8rem", color: "var(--text-secondary)", flexWrap: "wrap" }}>
+                      <span><strong>Report ID:</strong> <code>{viewPdfReport.id}</code></span>
+                      <span><strong>Appointment:</strong> <code>{viewPdfReport.appointmentId || "Direct Upload"}</code></span>
+                      <span><strong>Uploaded:</strong> {formatDate(viewPdfReport.uploadedAt)}</span>
+                      <span><strong>File:</strong> {viewPdfReport.fileName || "report.pdf"}</span>
+                    </div>
                   </div>
-                  <div className="report-doc-info">
-                    <h2>Diagnostic Lab Report</h2>
-                    <p><strong>NABL Accredited Sandbox Facility</strong></p>
-                    <p>File Ref: {viewPdfReport.fileName || "report.pdf"}</p>
-                    <p style={{ fontSize: "0.75rem" }}>Diagnostic Drive, Sector 4, MedCity</p>
-                  </div>
-                </div>
-
-                <div className="report-meta-grid">
-                  <div className="report-meta-item">
-                    <strong>Patient ID</strong>
-                    <code>{viewPdfReport.patientId}</code>
-                  </div>
-                  <div className="report-meta-item">
-                    <strong>Report ID</strong>
-                    <code>{viewPdfReport.id}</code>
-                  </div>
-                  <div className="report-meta-item">
-                    <strong>Associated Appointment</strong>
-                    <code>{viewPdfReport.appointmentId || "Direct Upload"}</code>
-                  </div>
-                  <div className="report-meta-item">
-                    <strong>Uploaded At</strong>
-                    <span>{formatDate(viewPdfReport.uploadedAt)}</span>
-                  </div>
-                </div>
-
-                <div className="report-section">
-                  <h3>Report Title</h3>
-                  <div style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: "1rem" }}>
-                    {viewPdfReport.reportTitle}
-                  </div>
-                </div>
-
-                <div className="report-section">
-                  <h3>Diagnostic Observations & Findings</h3>
-                  <table className="report-table">
-                    <thead>
-                      <tr>
-                        <th>Investigation Parameter</th>
-                        <th>Observed Clinical Value / Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {viewPdfReport.findings.split("\n").map((line: string, idx: number) => {
-                        const parts = line.split(":");
-                        if (parts.length >= 2) {
-                          return (
-                            <tr key={idx}>
-                              <td style={{ fontWeight: 600 }}>{parts[0].trim()}</td>
-                              <td>{parts.slice(1).join(":").trim()}</td>
-                            </tr>
-                          );
-                        }
-                        return (
-                          <tr key={idx}>
-                            <td colSpan={2} style={{ whiteSpace: "pre-wrap" }}>{line}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {viewPdfReport.notes && (
-                  <div className="report-section">
-                    <h3>Clinical Interpretations / Notes</h3>
-                    <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", fontStyle: "italic", lineHeight: "1.6" }}>
-                      {viewPdfReport.notes}
-                    </p>
+                ) : (
+                  /* Fallback: show structured metadata when PDF not in current session */
+                  <div className="clinical-report-pdf" id="clinical-report-pdf-print" style={{ padding: "1.5rem" }}>
+                    <div style={{ background: "var(--background)", border: "1px dashed var(--warning)", borderRadius: 8, padding: "1rem", marginBottom: "1.5rem", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                      <i className="fa-solid fa-triangle-exclamation" style={{ color: "var(--warning)", marginTop: 2 }}></i>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--warning)" }}>PDF Not Available in Current Session</div>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>The original file was uploaded in a previous session. Report metadata is shown below. To view the PDF, please re-upload the file.</div>
+                      </div>
+                    </div>
+                    <div className="clinical-report-header">
+                      <div className="report-clinic-logo">
+                        <i className="fa-solid fa-house-chimney-medical"></i>
+                        <span>
+                          {viewPdfReport.uploadedBy === "LAB-00001"
+                            ? "Apex Diagnostics Center"
+                            : (viewPdfReport.uploadedBy === "LAB-00002"
+                              ? "Metro Pathology Labs"
+                              : `Uploaded by: ${viewPdfReport.uploadedBy}`)}
+                        </span>
+                      </div>
+                      <div className="report-doc-info">
+                        <h2>Diagnostic Lab Report</h2>
+                        <p>File Ref: {viewPdfReport.fileName || "report.pdf"}</p>
+                      </div>
+                    </div>
+                    <div className="report-meta-grid">
+                      <div className="report-meta-item"><strong>Patient ID</strong><code>{viewPdfReport.patientId}</code></div>
+                      <div className="report-meta-item"><strong>Report ID</strong><code>{viewPdfReport.id}</code></div>
+                      <div className="report-meta-item"><strong>Appointment</strong><code>{viewPdfReport.appointmentId || "Direct"}</code></div>
+                      <div className="report-meta-item"><strong>Uploaded At</strong><span>{formatDate(viewPdfReport.uploadedAt)}</span></div>
+                    </div>
+                    <div className="report-section">
+                      <h3>Report Title</h3>
+                      <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{viewPdfReport.reportTitle}</div>
+                    </div>
+                    {viewPdfReport.findings && (
+                      <div className="report-section">
+                        <h3>Diagnostic Findings</h3>
+                        <div className="table-wrapper">
+                          <table className="report-table">
+                            <thead><tr><th>Parameter</th><th>Value / Status</th></tr></thead>
+                            <tbody>
+                              {viewPdfReport.findings.split("\n").map((line: string, idx: number) => {
+                                const parts = line.split(":");
+                                return parts.length >= 2
+                                  ? <tr key={idx}><td style={{ fontWeight: 600 }}>{parts[0].trim()}</td><td>{parts.slice(1).join(":").trim()}</td></tr>
+                                  : <tr key={idx}><td colSpan={2} style={{ whiteSpace: "pre-wrap" }}>{line}</td></tr>;
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                    {viewPdfReport.notes && (
+                      <div className="report-section">
+                        <h3>Notes</h3>
+                        <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", fontStyle: "italic", lineHeight: "1.6" }}>{viewPdfReport.notes}</p>
+                      </div>
+                    )}
                   </div>
                 )}
-
-                <div className="pres-sig-footer" style={{ marginTop: "3rem" }}>
-                  <div>
-                    <p>MedLink Pro Digital Signature Slip</p>
-                    <p style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>Verification Hash: SHA-{viewPdfReport.id.slice(-6)}</p>
-                  </div>
-                  <div className="pres-signature-line">
-                    <div className="line"></div>
-                    <p>Dr. Alan Vance, MD</p>
-                    <p style={{ fontSize: "0.75rem" }}>Chief Radiologist / Pathologist</p>
-                  </div>
-                </div>
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -4632,7 +7113,7 @@ export default function MedLinkApp() {
               const dayApps = appointments.filter(
                 a => a.doctorId === targetDocId && a.appointmentDate === selectedCalendarDateStr
               );
-              
+
               if (dayApps.length === 0) {
                 return (
                   <div style={{ textAlign: "center", padding: "3rem 0", color: "var(--text-secondary)" }}>
@@ -4641,7 +7122,7 @@ export default function MedLinkApp() {
                   </div>
                 );
               }
-              
+
               const getSessionType = (timeStr: string) => {
                 if (!timeStr) return "morning";
                 const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
@@ -4669,20 +7150,21 @@ export default function MedLinkApp() {
                 const pat = patients.find(p => p.id === app.patientId);
                 const isBlocked = app.status === "blocked";
                 const patientNameStr = isBlocked ? "Slot Blocked" : (pat?.name || `Patient (${app.patientId})`);
-                
+
                 return (
-                  <div 
-                    key={app.id} 
-                    style={{ 
-                      padding: "1rem", 
-                      border: "1px solid var(--border)", 
-                      borderRadius: "8px", 
+                  <div
+                    key={app.id}
+                    style={{
+                      padding: "1rem",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
                       background: isBlocked ? "var(--background)" : "var(--glass)",
-                      display: "flex", 
-                      justifyContent: "space-between", 
+                      display: "flex",
+                      justifyContent: "space-between",
                       alignItems: "center",
                       gap: "1rem",
-                      marginBottom: "0.5rem"
+                      marginBottom: "0.5rem",
+                      flexWrap: "wrap"
                     }}
                   >
                     <div>
@@ -4700,9 +7182,9 @@ export default function MedLinkApp() {
 
                     <div style={{ display: "flex", gap: "0.5rem" }}>
                       {app.status === "scheduled" && (
-                        <button 
+                        <button
                           type="button"
-                          className="btn btn-outline btn-sm" 
+                          className="btn btn-outline btn-sm"
                           style={{ color: "var(--danger)", borderColor: "var(--danger-light)" }}
                           onClick={() => {
                             if (confirm("Are you sure you want to cancel this appointment?")) {
@@ -4714,7 +7196,7 @@ export default function MedLinkApp() {
                         </button>
                       )}
                       {isBlocked && (
-                        <button 
+                        <button
                           type="button"
                           className="btn btn-outline btn-danger btn-sm"
                           onClick={async () => {
@@ -4808,8 +7290,13 @@ export default function MedLinkApp() {
     const docId = currentUser?.role === "doctor" ? currentUser.id : (currentUser?.role === "assistant" ? (currentUser.doctorId || "") : "");
     setBookingDoctorId(docId);
     setBookingPatientId("");
+    setBookingFamilyMemberId("");
     setBookingDate(new Date().toISOString().split("T")[0]);
     setBookingIsBlock(false);
+    setBookingTime("");
+    setBookingComplaint("");
+    setBookingSearchVal("");
+    setBookingSearchDone(false);
     loadBookingSlots();
     setIsBookAppOpen(true);
   }

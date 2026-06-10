@@ -44,26 +44,7 @@ export async function POST(request: NextRequest) {
       if (existing.role === 'patient') {
         const existingPatient = await prisma.patient.findFirst({ where: { primaryPhone } });
         if (existingPatient) {
-          // Auto-generate Family Member ID
-          const count = await prisma.familyMember.count();
-          const fmId = `FM-${String(count + 1).padStart(5, '0')}`;
-          
-          // Create Family Member record
-          const familyMember = await prisma.familyMember.create({
-            data: {
-              id: fmId,
-              name,
-              relation: 'Family Member', // Default relation
-              dateOfBirth,
-              gender,
-              bloodGroup: bloodGroup || null,
-              allergies: allergies || null,
-              chronicConditions: chronicConditions || null,
-              patientId: existingPatient.id
-            }
-          });
-          
-          return NextResponse.json({ patient: familyMember });
+          return NextResponse.json({ patient: existingPatient });
         }
       }
       return NextResponse.json({ error: 'A user with this phone number already exists.' }, { status: 400 });

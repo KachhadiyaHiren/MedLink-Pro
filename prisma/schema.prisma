@@ -35,6 +35,17 @@ model Doctor {
   rating          Float    @default(5.0)
   reviewsCount    Int      @default(0)
   isApproved      Boolean  @default(true)
+  signatureUrl    String?
+}
+
+model DoctorClinic {
+  id        String  @id      // e.g. DCLNC-00001
+  doctorId  String
+  name      String           // "Apollo Hospital", "City Medical Center"
+  address   String
+  phone     String?
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
 }
 
 model Patient {
@@ -95,6 +106,7 @@ model Consultation {
   weight         String?
   height         String?
   followUpDate   String?
+  clinicId       String?  // DoctorClinic.id or null for primary clinic
   createdAt      DateTime @default(now())
 }
 
@@ -108,6 +120,7 @@ model Prescription {
   issuedAt       DateTime @default(now())
   validUntil     String
   notes          String?
+  clinicId       String?  // DoctorClinic.id or null for primary clinic
   medicinesJson  String   // JSON string of medicines array
 }
 

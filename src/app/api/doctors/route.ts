@@ -91,3 +91,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, signatureUrl } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Doctor ID is required.' }, { status: 400 });
+    }
+
+    const doctor = await prisma.doctor.update({
+      where: { id },
+      data: {
+        signatureUrl
+      }
+    });
+
+    return NextResponse.json({ doctor });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

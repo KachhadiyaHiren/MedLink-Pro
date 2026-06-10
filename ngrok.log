@@ -1,0 +1,123 @@
+t=2026-06-09T11:21:41+0530 lvl=info msg="no configuration paths supplied"
+t=2026-06-09T11:21:41+0530 lvl=info msg="using configuration at default config path" path=C:\\Users\\hiren\\AppData\\Local\\ngrok\\ngrok.yml
+t=2026-06-09T11:21:41+0530 lvl=info msg="open config file" path=C:\\Users\\hiren\\AppData\\Local\\ngrok\\ngrok.yml err=nil
+t=2026-06-09T11:21:41+0530 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-06-09T11:21:41+0530 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-06-09T11:21:41+0530 lvl=info msg="client session established" obj=tunnels.session
+t=2026-06-09T11:21:41+0530 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-06-09T11:21:41+0530 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://localhost:3000 url=https://abdominal-washtub-collage.ngrok-free.dev
+t=2026-06-09T11:21:46+0530 lvl=info msg="join connections" obj=join id=751a4819b37b l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:55634
+t=2026-06-09T11:21:46+0530 lvl=info msg="join connections" obj=join id=d8172a3ec2ed l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:55634
+t=2026-06-09T11:21:46+0530 lvl=info msg="join connections" obj=join id=6c9f381542d5 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:55634
+t=2026-06-09T11:21:46+0530 lvl=info msg="join connections" obj=join id=690f73944072 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:55634
+t=2026-06-09T11:21:46+0530 lvl=info msg="join connections" obj=join id=f5e9e66e04ae l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:55634
+t=2026-06-09T11:21:46+0530 lvl=info msg="join connections" obj=join id=0c428cbc229b l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:55634
+t=2026-06-09T11:21:46+0530 lvl=info msg="join connections" obj=join id=d9bcc1f96758 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:55634
+t=2026-06-09T11:24:57+0530 lvl=info msg="no configuration paths supplied"
+t=2026-06-09T11:24:57+0530 lvl=info msg="using configuration at default config path" path=C:\\Users\\hiren\\AppData\\Local\\ngrok\\ngrok.yml
+t=2026-06-09T11:24:57+0530 lvl=info msg="open config file" path=C:\\Users\\hiren\\AppData\\Local\\ngrok\\ngrok.yml err=nil
+t=2026-06-09T11:24:58+0530 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-06-09T11:24:59+0530 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-06-09T11:25:19+0530 lvl=eror msg="failed to reconnect session" obj=tunnels.session err="failed to send authentication request: session closed"
+t=2026-06-09T11:25:48+0530 lvl=eror msg="failed to reconnect session" obj=tunnels.session err="failed to send authentication request: session closed"
+t=2026-06-09T11:25:49+0530 lvl=info msg="client session established" obj=tunnels.session
+t=2026-06-09T11:25:49+0530 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-06-09T11:25:50+0530 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://localhost:3000 url=https://abdominal-washtub-collage.ngrok-free.dev
+t=2026-06-09T11:27:47+0530 lvl=info msg="join connections" obj=join id=8d44b8e08954 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:57672
+t=2026-06-09T11:27:47+0530 lvl=info msg="join connections" obj=join id=8bc02d88b304 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:57672
+t=2026-06-09T11:35:42+0530 lvl=info msg="join connections" obj=join id=80a4396723ac l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:55310
+t=2026-06-09T11:35:42+0530 lvl=info msg="join connections" obj=join id=db39f4f73236 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:55310
+t=2026-06-09T11:46:14+0530 lvl=info msg="join connections" obj=join id=87f17cb8ecdc l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:46974
+t=2026-06-09T15:33:48+0530 lvl=info msg="join connections" obj=join id=3cb33b4521e2 l=[::1]:3000 r=103.115.154.61:49159
+t=2026-06-09T15:33:55+0530 lvl=info msg="join connections" obj=join id=43a5ae2249df l=[::1]:3000 r=103.115.154.61:49159
+t=2026-06-09T15:33:55+0530 lvl=info msg="join connections" obj=join id=6a567525512a l=[::1]:3000 r=103.115.154.61:49159
+t=2026-06-09T15:34:44+0530 lvl=info msg="join connections" obj=join id=bfd8e01713dd l=[::1]:3000 r=103.115.154.61:49159
+t=2026-06-09T16:00:29+0530 lvl=info msg="join connections" obj=join id=245c713a0f1e l=[::1]:3000 r=172.171.4.190:25274
+t=2026-06-09T16:00:39+0530 lvl=info msg="join connections" obj=join id=666af79efb35 l=[::1]:3000 r=103.115.154.61:60399
+t=2026-06-09T16:00:39+0530 lvl=info msg="join connections" obj=join id=a94c8033f98a l=[::1]:3000 r=103.115.154.61:60399
+t=2026-06-09T16:00:39+0530 lvl=info msg="join connections" obj=join id=4b509c9890c6 l=[::1]:3000 r=103.115.154.61:60399
+t=2026-06-09T16:06:26+0530 lvl=info msg="join connections" obj=join id=00b3adf5aad8 l=[::1]:3000 r=103.115.154.61:60399
+t=2026-06-09T16:06:26+0530 lvl=info msg="join connections" obj=join id=f71b1b11fe91 l=[::1]:3000 r=103.115.154.61:60399
+t=2026-06-09T16:06:34+0530 lvl=info msg="join connections" obj=join id=58bb3e1b09f9 l=[::1]:3000 r=103.115.154.61:60399
+t=2026-06-09T16:06:34+0530 lvl=info msg="join connections" obj=join id=fceaa9d93a35 l=[::1]:3000 r=103.115.154.61:60399
+t=2026-06-09T16:06:34+0530 lvl=info msg="join connections" obj=join id=043ad820087e l=[::1]:3000 r=103.115.154.61:60399
+t=2026-06-09T16:07:58+0530 lvl=warn msg="failed to open private leg" id=368df610f592 privaddr=localhost:3000 err="dial tcp [::1]:3000: connectex: No connection could be made because the target machine actively refused it."
+t=2026-06-09T16:08:23+0530 lvl=info msg="join connections" obj=join id=4829d3e1aad9 l=[::1]:3000 r=103.115.154.61:61835
+t=2026-06-09T16:08:24+0530 lvl=info msg="join connections" obj=join id=d6e29192c192 l=[::1]:3000 r=103.115.154.61:61835
+t=2026-06-09T16:08:27+0530 lvl=info msg="join connections" obj=join id=acf11bd7c0aa l=[::1]:3000 r=103.115.154.61:61835
+t=2026-06-09T16:10:23+0530 lvl=info msg="join connections" obj=join id=7d6947fadc3f l=[::1]:3000 r=103.115.154.61:61835
+t=2026-06-09T16:10:25+0530 lvl=info msg="join connections" obj=join id=405101cff2aa l=[::1]:3000 r=103.115.154.61:61835
+t=2026-06-09T16:10:28+0530 lvl=info msg="join connections" obj=join id=c52b5ba6fede l=[::1]:3000 r=103.115.154.61:61835
+t=2026-06-09T17:09:11+0530 lvl=info msg="join connections" obj=join id=c0fe28645947 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:33694
+t=2026-06-09T17:09:12+0530 lvl=info msg="join connections" obj=join id=99fc4b7c0346 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:33694
+t=2026-06-09T17:10:23+0530 lvl=info msg="join connections" obj=join id=87d6448a792c l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:33694
+t=2026-06-09T17:10:23+0530 lvl=info msg="join connections" obj=join id=fa0e8242e9c9 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:33694
+t=2026-06-09T17:10:49+0530 lvl=info msg="join connections" obj=join id=1f1871d9c571 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:33694
+t=2026-06-09T17:10:49+0530 lvl=info msg="join connections" obj=join id=0ec62118a45c l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:33694
+t=2026-06-09T17:11:50+0530 lvl=info msg="no configuration paths supplied"
+t=2026-06-09T17:11:50+0530 lvl=info msg="using configuration at default config path" path=C:\\Users\\hiren\\AppData\\Local\\ngrok\\ngrok.yml
+t=2026-06-09T17:11:50+0530 lvl=info msg="open config file" path=C:\\Users\\hiren\\AppData\\Local\\ngrok\\ngrok.yml err=nil
+t=2026-06-09T17:11:50+0530 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-06-09T17:11:51+0530 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-06-09T17:11:51+0530 lvl=info msg="client session established" obj=tunnels.session
+t=2026-06-09T17:11:51+0530 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-06-09T17:11:51+0530 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://localhost:3000 url=https://abdominal-washtub-collage.ngrok-free.dev
+t=2026-06-09T17:11:53+0530 lvl=info msg="join connections" obj=join id=90cf68180298 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:59016
+t=2026-06-09T17:11:53+0530 lvl=info msg="join connections" obj=join id=b9600b379e60 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:59016
+t=2026-06-09T17:12:28+0530 lvl=info msg="join connections" obj=join id=122e5f202273 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:59016
+t=2026-06-09T17:12:28+0530 lvl=info msg="join connections" obj=join id=1dfd7449d23c l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:59016
+t=2026-06-09T17:13:35+0530 lvl=info msg="no configuration paths supplied"
+t=2026-06-09T17:13:35+0530 lvl=info msg="using configuration at default config path" path=C:\\Users\\hiren\\AppData\\Local\\ngrok\\ngrok.yml
+t=2026-06-09T17:13:35+0530 lvl=info msg="open config file" path=C:\\Users\\hiren\\AppData\\Local\\ngrok\\ngrok.yml err=nil
+t=2026-06-09T17:13:35+0530 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-06-09T17:13:35+0530 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-06-09T17:13:35+0530 lvl=info msg="client session established" obj=tunnels.session
+t=2026-06-09T17:13:35+0530 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-06-09T17:13:35+0530 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://localhost:3000 url=https://abdominal-washtub-collage.ngrok-free.dev
+t=2026-06-09T17:13:37+0530 lvl=info msg="join connections" obj=join id=4a6beae9c03b l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:48698
+t=2026-06-09T17:13:37+0530 lvl=info msg="join connections" obj=join id=7bdb3bd9fbe4 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:48698
+t=2026-06-09T17:13:56+0530 lvl=info msg="join connections" obj=join id=7e9f9aa80e05 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:13:56+0530 lvl=info msg="join connections" obj=join id=2fca4a26d100 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:13:56+0530 lvl=info msg="join connections" obj=join id=c0265839bd35 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:13:56+0530 lvl=info msg="join connections" obj=join id=6bf9965cd851 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:13:56+0530 lvl=info msg="join connections" obj=join id=96c3d069c74f l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:13:56+0530 lvl=info msg="join connections" obj=join id=ba6dd6b7125a l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:13:56+0530 lvl=info msg="join connections" obj=join id=c4e01e4251b9 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:15:58+0530 lvl=info msg="join connections" obj=join id=9ac976660084 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:15:58+0530 lvl=info msg="join connections" obj=join id=f78d812e9af1 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:15:58+0530 lvl=info msg="join connections" obj=join id=da8746bcec93 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:38648
+t=2026-06-09T17:16:01+0530 lvl=info msg="join connections" obj=join id=72ec6678a9e3 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:43706
+t=2026-06-09T17:16:04+0530 lvl=info msg="join connections" obj=join id=76ba1474124d l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:43706
+t=2026-06-09T17:22:12+0530 lvl=info msg="join connections" obj=join id=8443bda5d41f l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:22:12+0530 lvl=info msg="join connections" obj=join id=7ac49d237c33 l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:22:12+0530 lvl=info msg="join connections" obj=join id=b5d9005d4991 l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:22:12+0530 lvl=info msg="join connections" obj=join id=cf532bc7bab9 l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:22:12+0530 lvl=info msg="join connections" obj=join id=720c82bff62d l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:22:12+0530 lvl=info msg="join connections" obj=join id=ec45fab4a486 l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:22:12+0530 lvl=info msg="join connections" obj=join id=aa2513b1ecaf l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:22:21+0530 lvl=info msg="join connections" obj=join id=cfd15f93a10f l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:22:33+0530 lvl=info msg="join connections" obj=join id=727c6946458b l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:23:43+0530 lvl=info msg="join connections" obj=join id=41792c676bec l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:23:43+0530 lvl=info msg="join connections" obj=join id=e5ccc2086d5a l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:23:43+0530 lvl=info msg="join connections" obj=join id=eb9ac93c28c8 l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:23:43+0530 lvl=info msg="join connections" obj=join id=d224ee082dbd l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:24:05+0530 lvl=info msg="join connections" obj=join id=71064e2958a4 l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:24:05+0530 lvl=info msg="join connections" obj=join id=355f2691f6bb l=[::1]:3000 r=150.107.98.159:61924
+t=2026-06-09T17:24:20+0530 lvl=info msg="join connections" obj=join id=35e59876cbaa l=[::1]:3000 r=150.107.98.159:61938
+t=2026-06-09T17:24:20+0530 lvl=info msg="join connections" obj=join id=ce83c9daac7b l=[::1]:3000 r=150.107.98.159:61938
+t=2026-06-09T17:24:20+0530 lvl=info msg="join connections" obj=join id=564dafa49dd5 l=[::1]:3000 r=150.107.98.159:61938
+t=2026-06-09T17:24:20+0530 lvl=info msg="join connections" obj=join id=ea7d159f450a l=[::1]:3000 r=150.107.98.159:61938
+t=2026-06-09T17:24:33+0530 lvl=info msg="join connections" obj=join id=cdfa9f24a7db l=[::1]:3000 r=150.107.98.159:61939
+t=2026-06-09T17:24:33+0530 lvl=info msg="join connections" obj=join id=3a8a582f8c63 l=[::1]:3000 r=150.107.98.159:61939
+t=2026-06-09T19:30:33+0530 lvl=info msg="join connections" obj=join id=13bb6a014480 l=[::1]:3000 r=[2409:40c0:106a:c01c:494f:a03b:350:f30b]:39676
+t=2026-06-09T20:47:15+0530 lvl=eror msg="heartbeat timeout, terminating session" obj=tunnels.session obj=csess id=502f9277e3dd clientid=74b212a3522e6bcb4cc5e03794c9eef9
+t=2026-06-09T20:47:15+0530 lvl=eror msg="session closed, starting reconnect loop" obj=tunnels.session obj=csess id=c0676accd4b6 err="write tcp 192.168.0.105:60066->3.108.166.207:443: wsasend: An existing connection was forcibly closed by the remote host."
+t=2026-06-09T20:47:17+0530 lvl=info msg="client session established" obj=tunnels.session
+t=2026-06-09T20:47:17+0530 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-06-09T20:59:36+0530 lvl=eror msg="session closed, starting reconnect loop" obj=tunnels.session obj=csess id=c0676accd4b6 err="write tcp 192.168.0.105:52848->3.108.166.207:443: wsasend: An existing connection was forcibly closed by the remote host."
+t=2026-06-09T20:59:38+0530 lvl=info msg="client session established" obj=tunnels.session
+t=2026-06-09T20:59:38+0530 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-06-09T20:59:41+0530 lvl=eror msg="heartbeat timeout, terminating session" obj=tunnels.session obj=csess id=ba179dcb4212 clientid=74b212a3522e6bcb4cc5e03794c9eef9
+t=2026-06-09T21:05:42+0530 lvl=info msg="received stop request" obj=app stopReq="{err:<nil> restart:false}"
+t=2026-06-09T21:05:43+0530 lvl=info msg="session closing" obj=tunnels.session err=nil
+t=2026-06-09T21:05:43+0530 lvl=info msg="accept failed" obj=tunnels.session obj=csess id=c0676accd4b6 err="reconnecting session closed"

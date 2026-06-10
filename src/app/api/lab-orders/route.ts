@@ -6,11 +6,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const labId = searchParams.get('labId') || '';
     const patientId = searchParams.get('patientId') || '';
+    const doctorId = searchParams.get('doctorId') || '';
 
     const labOrders = await prisma.labOrder.findMany({
       where: {
         AND: [
           patientId ? { patientId } : {},
+          doctorId ? { doctorId } : {},
           labId ? {
             OR: [
               { labId },

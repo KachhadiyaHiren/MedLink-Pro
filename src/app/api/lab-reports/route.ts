@@ -6,12 +6,23 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const patientId = searchParams.get('patientId') || '';
     const appointmentId = searchParams.get('appointmentId') || '';
+    const doctorId = searchParams.get('doctorId') || '';
+
+    let appointmentIds: string[] | undefined = undefined;
+    if (doctorId) {
+      const apps = await prisma.appointment.findMany({
+        where: { doctorId },
+        select: { id: true }
+      });
+      appointmentIds = apps.map(a => a.id);
+    }
 
     const labReports = await prisma.labReport.findMany({
       where: {
         AND: [
           patientId ? { patientId } : {},
-          appointmentId ? { appointmentId } : {}
+          appointmentId ? { appointmentId } : {},
+          appointmentIds ? { appointmentId: { in: appointmentIds } } : {}
         ]
       },
       orderBy: { uploadedAt: 'desc' }

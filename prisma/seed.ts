@@ -12,6 +12,7 @@ async function main() {
   await prisma.appointment.deleteMany();
   await prisma.familyMember.deleteMany();
   await prisma.patient.deleteMany();
+  await prisma.doctorClinic.deleteMany();
   await prisma.doctor.deleteMany();
   await prisma.medicinesCatalog.deleteMany();
   await prisma.user.deleteMany();
@@ -39,7 +40,7 @@ async function main() {
       id: 'DOC-00001',
       phone: '9876500001',
       fullName: 'Dr. Sarah Jenkins',
-      email: 'sarah.jenkins@medlink.com',
+      email: 'sarah.jenkins@healone360.com',
       role: 'doctor',
       profilePhoto: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=200',
       doctorDetails: {
@@ -57,14 +58,15 @@ async function main() {
         profilePhoto: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=200',
         rating: 4.8,
         reviewsCount: 142,
-        isApproved: true
+        isApproved: true,
+        signatureUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCAyMDAgODAiPjxwYXRoIGQ9Ik0gMTAgNDAgUSA1MCAxMCAxMDAgNTAgVCAxOTAgMzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzBlYTVlOSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48dGV4dCB4PSIyNSIgeT0iNDUiIGZvbnQtZmFtaWx5PSInQnJ1c2ggU2NyaXB0IE1UJywgY3Vyc2l2ZSwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyOCIgZmlsbD0iIzFlM2E4YSI+RHIuIFMuIEplbmtpbnM8L3RleHQ+PC9zdmc+'
       }
     },
     {
       id: 'DOC-00002',
       phone: '9876500002',
       fullName: 'Dr. Amit Sharma',
-      email: 'amit.sharma@medlink.com',
+      email: 'amit.sharma@healone360.com',
       role: 'doctor',
       profilePhoto: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=200',
       doctorDetails: {
@@ -82,14 +84,15 @@ async function main() {
         profilePhoto: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=200',
         rating: 4.9,
         reviewsCount: 218,
-        isApproved: true
+        isApproved: true,
+        signatureUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCAyMDAgODAiPjxwYXRoIGQ9Ik0gMTUgMzUgUSA2MCA1MCAxMTAgMjAgVCAxODUgNDUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzEwYjk4MSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48dGV4dCB4PSIzMCIgeT0iNDgiIGZvbnQtZmFtaWx5PSInQnJ1c2ggU2NyaXB0IE1UJywgY3Vyc2l2ZSwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyOCIgZmlsbD0iIzA2NWY0NiI+RHIuIEEuIFNoYXJtYTwvdGV4dD48L3N2Zz4='
       }
     },
     {
       id: 'DOC-00003',
       phone: '9876500003',
       fullName: 'Dr. Eleanor Vance',
-      email: 'eleanor.vance@medlink.com',
+      email: 'eleanor.vance@healone360.com',
       role: 'doctor',
       profilePhoto: 'https://images.unsplash.com/photo-1594824813573-246434de83fb?auto=format&fit=crop&q=80&w=200',
       doctorDetails: {
@@ -107,14 +110,15 @@ async function main() {
         profilePhoto: 'https://images.unsplash.com/photo-1594824813573-246434de83fb?auto=format&fit=crop&q=80&w=200',
         rating: 4.7,
         reviewsCount: 85,
-        isApproved: true
+        isApproved: true,
+        signatureUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCAyMDAgODAiPjxwYXRoIGQ9Ik0gMjAgNDUgUSA3MCAxNSAxMjAgNDAgVCAxODAgMjUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhiNWNmNiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48dGV4dCB4PSIyNSIgeT0iNTIiIGZvbnQtZmFtaWx5PSInQnJ1c2ggU2NyaXB0IE1UJywgY3Vyc2l2ZSwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyOCIgZmlsbD0iIzViMjFiNiI+RHIuIEUuIFZhbmNlPC90ZXh0Pjwvc3ZnPg=='
       }
     },
     {
       id: 'DOC-00004',
       phone: '9876500004',
       fullName: 'Dr. Rajesh Patil',
-      email: 'rajesh.patil@medlink.com',
+      email: 'rajesh.patil@healone360.com',
       role: 'doctor',
       profilePhoto: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=200',
       doctorDetails: {
@@ -132,7 +136,8 @@ async function main() {
         profilePhoto: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=200',
         rating: 4.6,
         reviewsCount: 98,
-        isApproved: false // Pending approval
+        isApproved: false,
+        signatureUrl: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCAyMDAgODAiPjxwYXRoIGQ9Ik0gMTIgMzAgUSA1NSA2MCAxMTUgMzUgVCAxOTAgNTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2Y1OWUwYiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48dGV4dCB4PSIzMiIgeT0iNDIiIGZvbnQtZmFtaWx5PSInQnJ1c2ggU2NyaXB0IE1UJywgY3Vyc2l2ZSwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyOCIgZmlsbD0iIzc4MzUwZiI+RHIuIFIuIFBhdGlsPC90ZXh0Pjwvc3ZnPg=='
       }
     }
   ];
@@ -152,6 +157,42 @@ async function main() {
     await prisma.doctor.create({
       data: d.doctorDetails
     });
+  }
+
+  // Seed Secondary Clinics for Doctors
+  console.log('Seeding Doctor Secondary Clinics...');
+  const doctorClinics = [
+    {
+      id: 'DCLNC-00001-001',
+      doctorId: 'DOC-00001',
+      name: 'Apollo Heart Institute',
+      address: 'Block-C, Apollo Hospitals, Jubilee Hills, Metro City',
+      phone: '0401234567',
+      isPrimary: false,
+      sortOrder: 1
+    },
+    {
+      id: 'DCLNC-00001-002',
+      doctorId: 'DOC-00001',
+      name: 'Metro General Hospital — Cardiology Wing',
+      address: '3rd Floor, Metro General Hospital, MG Road, Metro City',
+      phone: '0409876543',
+      isPrimary: false,
+      sortOrder: 2
+    },
+    {
+      id: 'DCLNC-00002-001',
+      doctorId: 'DOC-00002',
+      name: 'Rainbow Children\'s Hospital',
+      address: 'Wing-A, Rainbow Hospital, Banjara Hills, Metro City',
+      phone: '0405551234',
+      isPrimary: false,
+      sortOrder: 1
+    }
+  ];
+
+  for (const dc of doctorClinics) {
+    await prisma.doctorClinic.create({ data: dc });
   }
 
   // Seed Labs
@@ -211,7 +252,7 @@ async function main() {
       id: 'ADM-001',
       phone: '9900001122',
       fullName: 'System Administrator',
-      email: 'admin@medlink.com',
+      email: 'admin@healone360.com',
       role: 'admin',
       profilePhoto: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=200'
     }

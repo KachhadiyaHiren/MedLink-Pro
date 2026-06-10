@@ -1,6 +1,6 @@
-# MedLink Pro — Database-Driven Healthcare Portal Suite
+# HealOne 360 — Database-Driven Healthcare Portal Suite
 
-MedLink Pro is a modern, responsive, and database-driven healthcare portal suite built using **Next.js (App Router), TypeScript, and Prisma ORM with SQLite**. It provides a seamless, integrated clinical workspace connecting Doctors, Patients, and Labs in a secure proof-of-concept sandbox environment.
+HealOne 360 is a modern, responsive, and database-driven healthcare portal suite built using **Next.js (App Router), TypeScript, and Prisma ORM with SQLite**. It provides a seamless, integrated clinical workspace connecting Doctors, Patients, and Labs in a secure proof-of-concept sandbox environment.
 
 ## 🚀 Key Features
 
@@ -39,8 +39,8 @@ Follow these steps to clone the repository, initialize the SQLite database, seed
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/KachhadiyaHiren/MedLink-Pro.git
-cd MedLink-Pro
+git clone https://github.com/KachhadiyaHiren/HealOne-360.git
+cd HealOne-360
 ```
 
 ### 2. Install Project Dependencies
